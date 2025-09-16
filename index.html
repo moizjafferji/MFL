@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Flag Football Voice Stats — Per-Player</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+<div class="max-w-7xl mx-auto p-4 md:p-8">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-2">
+      <h1 class="text-2xl font-bold">Flag Football Voice Stats — Per-Player</h1>
+      <span class="text-xs px-2 py-0.5 rounded-full bg-black text-white">beta</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="exportCsvBtn" class="px-3 py-2 rounded-xl bg-white border shadow">Export CSV</button>
+      <button id="exportJsonBtn" class="px-3 py-2 rounded-xl bg-white border shadow">Export JSON</button>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-3 gap-4">
+
+    <!-- LEFT: Controls + Play Log -->
+    <div class="md:col-span-2 space-y-4">
+
+      <!-- Controls -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <!-- Possession -->
+        <div class="p-3 bg-white border rounded-2xl shadow-sm">
+          <div class="text-xs uppercase opacity-60">Possession</div>
+          <div class="flex gap-2 mt-2">
+            <button id="posHome" class="px-3 py-2 rounded-xl border bg-black text-white">BLU</button>
+            <button id="posAway" class="px-3 py-2 rounded-xl border bg-white">GLD</button>
+          </div>
+          <div class="text-xs text-gray-500 mt-2" id="clockText">Period: <span id="periodText">Q1</span></div>
+        </div>
+
+        <!-- Period -->
+        <div class="p-3 bg-white border rounded-2xl shadow-sm">
+          <div class="text-xs uppercase opacity-60">Period</div>
+          <div class="flex flex-wrap gap-2 mt-2">
+            <button data-period="Q1" class="period px-3 py-2 rounded-xl border bg-black text-white">Q1</button>
+            <button data-period="Q2" class="period px-3 py-2 rounded-xl border bg-white">Q2</button>
+            <button data-period="Q3" class="period px-3 py-2 rounded-xl border bg-white">Q3</button>
+            <button data-period="Q4" class="period px-3 py-2 rounded-xl border bg-white">Q4</button>
+            <button data-period="OT" class="period px-3 py-2 rounded-xl border bg-white">OT</button>
+          </div>
+        </div>
+
+        <!-- Recorder -->
+        <div class="p-3 bg-white border rounded-2xl shadow-sm">
+          <div class="text-xs uppercase opacity-60">Recorder</div>
+          <button id="recordBtn" class="mt-2 px-4 py-2 rounded-xl border shadow bg-green-600 text-white">
+            Start Recording
+          </button>
+          <div id="speechSupport" class="text-xs text-gray-500 mt-1"></div>
+          <div id="interim" class="text-sm text-gray-700 mt-1"></div>
+        </div>
+
+        <!-- Quick actions -->
+        <div class="p-3 bg-white border rounded-2xl shadow-sm">
+          <div class="text-xs uppercase opacity-60">Quick</div>
+          <div class="flex gap-2 mt-2">
+            <button id="undoBtn" class="px-3 py-2 rounded-xl border bg-white">Undo</button>
+            <button id="clearBtn" class="px-3 py-2 rounded-xl border bg-white">Clear</button>
+          </div>
+          <div class="text-xs text-gray-500 mt-2">
+            Say: “complete to 17”, “incomplete”, “touchdown to 11”, “rush by 21”, “interception by 42 pick six”,
+            “extra point good”, “two point no good”
+          </div>
+        </div>
+      </div>
+
+      <!-- Play Log -->
+      <div class="p-3 bg-white border rounded-2xl shadow-sm">
+        <div class="flex items-center justify-between">
+          <div class="text-xs uppercase opacity-60 mb-2">Play Log</div>
+          <div class="text-xs text-gray-500">Tap 🗑 to delete a row</div>
+        </div>
+        <ul id="playLog" class="space-y-2"></ul>
+        <div id="emptyLog" class="text-sm text-gray-500">No plays yet.</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Rosters + Stats -->
+    <div class="space-y-4">
+      <!-- Roster editor -->
+      <div class="p-3 bg-white border rounded-2xl shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-xs uppercase opacity-60">Roster Editor</div>
+          <div class="text-xs text-gray-500">Set QB with the radio</div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-flex h-3 w-3 rounded-full bg-blue-400"></span>
+              <span class="text-sm font-semibold">Blue (BLU)</span>
+            </div>
+            <div id="rosterHome" class="space-y-1"></div>
+            <div class="flex gap-1 mt-2">
+              <input id="homeNum" type="number" min="0" placeholder="#"
+                     class="w-14 px-2 py-1 border rounded-lg text-sm">
+              <input id="homeName" type="text" placeholder="Name"
+                     class="flex-1 px-2 py-1 border rounded-lg text-sm">
+              <select id="homePos" class="px-2 py-1 border rounded-lg text-sm">
+                <option>WR</option><option>RB</option><option>DB</option><option>QB</option>
+              </select>
+              <button id="addHome" class="px-2 py-1 border rounded-lg text-sm bg-white">Add</button>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-flex h-3 w-3 rounded-full bg-yellow-400"></span>
+              <span class="text-sm font-semibold">Gold (GLD)</span>
+            </div>
+            <div id="rosterAway" class="space-y-1"></div>
+            <div class="flex gap-1 mt-2">
+              <input id="awayNum" type="number" min="0" placeholder="#"
+                     class="w-14 px-2 py-1 border rounded-lg text-sm">
+              <input id="awayName" type="text" placeholder="Name"
+                     class="flex-1 px-2 py-1 border rounded-lg text-sm">
+              <select id="awayPos" class="px-2 py-1 border rounded-lg text-sm">
+                <option>WR</option><option>RB</option><option>DB</option><option>QB</option>
+              </select>
+              <button id="addAway" class="px-2 py-1 border rounded-lg text-sm bg-white">Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Box scores -->
+      <div class="p-3 bg-white border rounded-2xl shadow-sm">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="inline-flex h-3 w-3 rounded-full bg-blue-400"></span>
+          <span class="text-sm font-semibold">Blue (BLU) — Player Stats</span>
+        </div>
+        <div id="statsHome" class="overflow-auto border rounded-2xl p-2 text-sm"></div>
+      </div>
+
+      <div class="p-3 bg-white border rounded-2xl shadow-sm">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="inline-flex h-3 w-3 rounded-full bg-yellow-400"></span>
+          <span class="text-sm font-semibold">Gold (GLD) — Player Stats</span>
+        </div>
+        <div id="statsAway" class="overflow-auto border rounded-2xl p-2 text-sm"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*** ----- STATE ----- ***/
+let possession = "HOME";
+let period = "Q1";
+document.getElementById("periodText").textContent = period;
+
+const DEFAULT_HOME = {
+  name: "Blue", short: "BLU",
+  players: {
+    1: {name:"Ali H.", pos:"QB"},
+    7: {name:"Moiz J.", pos:"WR"},
+    11:{name:"Hass S.", pos:"WR"},
+    17:{name:"Yusuf F.", pos:"WR"},
+    21:{name:"Ammar K.", pos:"RB"},
+    33:{name:"Husain M.", pos:"DB"},
+  }
+};
+const DEFAULT_AWAY = {
+  name: "Gold", short: "GLD",
+  players: {
+    2: {name:"Shabbir H.", pos:"QB"},
+    5: {name:"Hatym H.", pos:"WR"},
+    8: {name:"Hassan S.", pos:"WR"},
+    12:{name:"Burhan S.", pos:"WR"},
+    24:{name:"Abeezar K.", pos:"RB"},
+    42:{name:"Abbas F.", pos:"DB"},
+  }
+};
+let roster = { HOME: JSON.parse(JSON.stringify(DEFAULT_HOME)),
+               AWAY: JSON.parse(JSON.stringify(DEFAULT_AWAY)) };
+
+let events = []; // newest first
+
+/*** ----- SPEECH ----- ***/
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+if (SR) {
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.onresult = (e) => {
+    let interimText = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      if (res.isFinal) {
+        handleTranscript(res[0].transcript);
+      } else {
+        interimText += res[0].transcript + " ";
+      }
+    }
+    document.getElementById("interim").textContent = interimText.trim();
+  };
+  recognition.onend = () => toggleRecordButton(false);
+  document.getElementById("speechSupport").textContent = "Speech API supported!";
+} else {
+  document.getElementById("speechSupport").textContent = "Speech API not supported in this browser.";
+}
+
+/*** ----- CONTROLS ----- ***/
+const recordBtn = document.getElementById("recordBtn");
+recordBtn.onclick = () => {
+  if (!recognition) return;
+  if (recognition._listening) { recognition.stop(); recognition._listening=false; }
+  else { recognition.start(); recognition._listening=true; }
+  toggleRecordButton(recognition._listening);
+};
+function toggleRecordButton(listening) {
+  if (listening) {
+    recordBtn.textContent = "Stop Recording";
+    recordBtn.classList.remove("bg-green-600");
+    recordBtn.classList.add("bg-red-600");
+  } else {
+    recordBtn.textContent = "Start Recording";
+    recordBtn.classList.add("bg-green-600");
+    recordBtn.classList.remove("bg-red-600");
+  }
+}
+
+document.getElementById("posHome").onclick = ()=>{ possession="HOME"; togglePos(); };
+document.getElementById("posAway").onclick = ()=>{ possession="AWAY"; togglePos(); };
+function togglePos() {
+  document.getElementById("posHome").classList.toggle("bg-black", possession==="HOME");
+  document.getElementById("posHome").classList.toggle("text-white", possession==="HOME");
+  document.getElementById("posAway").classList.toggle("bg-black", possession==="AWAY");
+  document.getElementById("posAway").classList.toggle("text-white", possession==="AWAY");
+}
+
+document.querySelectorAll(".period").forEach(btn=>{
+  btn.onclick=()=>{ period=btn.dataset.period; document.getElementById("periodText").textContent=period;
+    document.querySelectorAll(".period").forEach(b=>{ b.classList.remove("bg-black","text-white"); b.classList.add("bg-white");});
+    btn.classList.add("bg-black","text-white");
+  };
+});
+
+document.getElementById("undoBtn").onclick = ()=>{ if (events.length) { events.shift(); renderAll(); } };
+document.getElementById("clearBtn").onclick = ()=>{ if (confirm("Clear all plays?")) { events = []; renderAll(); } };
+
+/*** ----- ROSTER EDITOR ----- ***/
+function renderRoster(side) {
+  const root = document.getElementById(side==="HOME" ? "rosterHome" : "rosterAway");
+  root.innerHTML = "";
+  const entries = Object.entries(roster[side].players)
+    .map(([num,p])=>({num:Number(num),...p}))
+    .sort((a,b)=>a.num-b.num);
+
+  entries.forEach(p=>{
+    const row = document.createElement("div");
+    row.className = "flex items-center gap-2 text-sm";
+    row.innerHTML = `
+      <label class="inline-flex items-center gap-1">
+        <input type="radio" name="qb_${side}" ${p.pos.toUpperCase()==="QB"?"checked":""} data-side="${side}" data-num="${p.num}">
+        QB
+      </label>
+      <span class="w-10 text-right">#${p.num}</span>
+      <input class="flex-1 px-2 py-1 border rounded-lg" value="${p.name}">
+      <select class="px-2 py-1 border rounded-lg">
+        <option ${p.pos==="WR"?"selected":""}>WR</option>
+        <option ${p.pos==="RB"?"selected":""}>RB</option>
+        <option ${p.pos==="DB"?"selected":""}>DB</option>
+        <option ${p.pos==="QB"?"selected":""}>QB</option>
+      </select>
+      <button class="px-2 py-1 border rounded-lg">✏️</button>
+      <button class="px-2 py-1 border rounded-lg">🗑</button>
+    `;
+    const [qbRadio, , nameInput, posSel, editBtn, delBtn] = row.querySelectorAll("input,select,button");
+    qbRadio.onchange = () => setQB(side, p.num);
+    editBtn.onclick = () => {
+      roster[side].players[p.num] = { name: nameInput.value, pos: posSel.value };
+      renderAll();
+    };
+    delBtn.onclick = () => { delete roster[side].players[p.num]; renderAll(); };
+    root.appendChild(row);
+  });
+}
+function setQB(side, jersey) {
+  Object.values(roster[side].players).forEach(pl=>{ if (pl.pos==="QB") pl.pos="WR"; });
+  if (roster[side].players[jersey]) roster[side].players[jersey].pos = "QB";
+  renderAll();
+}
+document.getElementById("addHome").onclick = ()=>addPlayer("HOME","homeNum","homeName","homePos");
+document.getElementById("addAway").onclick = ()=>addPlayer("AWAY","awayNum","awayName","awayPos");
+function addPlayer(side, nId, nameId, posId) {
+  const n = parseInt(document.getElementById(nId).value,10);
+  const nm = document.getElementById(nameId).value.trim();
+  const pos = document.getElementById(posId).value;
+  if (!n || !nm) return;
+  roster[side].players[n] = { name: nm, pos };
+  document.getElementById(nId).value = "";
+  document.getElementById(nameId).value = "";
+  renderAll();
+}
+
+/*** ----- PARSER ----- ***/
+// number words → digits
+const WORD_NUM = {
+  zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9,
+  ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16,
+  seventeen:17, eighteen:18, nineteen:19, twenty:20, thirty:30, forty:40, fifty:50
+};
+function normalize(s){ return s.toLowerCase().replace(/[^a-z0-9#\\s]/g," ").replace(/\\s+/g," ").trim(); }
+function wordsToNumberSeq(tokens, startIdx){
+  // Try to parse jersey like "one seven" → 17 OR a plain number
+  for (let i=startIdx;i<tokens.length;i++){
+    const raw = tokens[i].replace(/^#/,"");
+    if (/^\\d+$/.test(raw)) return {num:parseInt(raw,10), idx:i};
+    const t1 = WORD_NUM[ tokens[i] ];
+    const t2 = WORD_NUM[ tokens[i+1] ];
+    if (t1!==undefined && t2!==undefined && t1<10 && t2<10) {
+      return { num: parseInt(String(t1)+String(t2),10), idx:i+1 };
+    }
+    if (t1!==undefined && t1>=0 && t1<60) return { num: t1, idx:i };
+  }
+  return null;
+}
+function jerseyAfter(tokens, kw){
+  const i = tokens.indexOf(kw);
+  if (i>=0) {
+    const found = wordsToNumberSeq(tokens, i+1);
+    if (found) return found.num;
+  }
+  return null;
+}
+function parseTranscript(raw, posSide){
+  const text = normalize(raw);
+  const toks = text.split(" ");
+  const has = (w)=>toks.includes(w);
+  const any = (...arr)=>arr.some(has);
+  const defSide = posSide==="HOME" ? "AWAY":"HOME";
+
+  // XP
+  if (any("extra","point","pat","conversion","two","2")){
+    const good = any("good","made","convert","successful");
+    const two = any("two","2","for2","goingfor2");
+    return { type: two ? (good?"xp2_good":"xp2_bad") : (good?"xp1_good":"xp1_bad") };
+  }
+  // INT / pick six
+  if (any("interception","intercepted","picked","pickedoff")){
+    const by = jerseyAfter(toks,"by") ?? jerseyAfter(toks,"from");
+    const pick6 = any("pick","pick6","picksix","house","touchdown","td");
+    return { type: pick6?"pick_six":"int", by, defense:defSide };
+  }
+  // TD
+  if (any("touchdown","td")){
+    const passy = any("pass","throw","complete","caught","to");
+    const to = jerseyAfter(toks,"to");
+    const by = jerseyAfter(toks,"by");
+    return passy ? { type:"td_pass", to } : { type:"td_rush", by };
+  }
+  // Complete / Incomplete
+  if (any("complete","caught","catch")) {
+    const to = jerseyAfter(toks,"to") ?? jerseyAfter(toks,"by");
+    return { type:"pass_complete", to };
+  }
+  if (any("incomplete","drop","dropped","miss")) return { type:"pass_incomplete" };
+  // Rush
+  if (any("rush","run","keeper","draw","handoff")) {
+    const by = jerseyAfter(toks,"by") ?? jerseyAfter(toks,"to");
+    return { type:"rush", by };
+  }
+  // Sack / pull
+  if (any("sack","flag","pull","pulled")) {
+    const by = jerseyAfter(toks,"by") ?? jerseyAfter(toks,"from");
+    return { type:"sack", by, defense:defSide };
+  }
+  // Penalty
+  if (any("penalty","offside","offsides","false","holding","illegal")) return { type:"penalty" };
+
+  return { type:"unknown" };
+}
+
+/*** ----- ACCUMULATION ----- ***/
+function findQB(side){
+  const ps = roster[side].players;
+  for (const [num,p] of Object.entries(ps)) if ((p.pos||"").toUpperCase()==="QB") return Number(num);
+  // fallback first jersey
+  const first = Object.keys(ps)[0];
+  return first ? Number(first) : null;
+}
+function ensureStats(store, side, num){
+  if (!store[side]) store[side] = {};
+  if (!store[side][num]) store[side][num] = {
+    pass_att:0, pass_cmp:0, pass_td:0, pass_int:0,
+    targets:0, rec:0, rec_td:0,
+    rush_att:0, rush_td:0,
+    sacks:0, pulls:0, ints:0, pick6:0,
+    xp1_made:0, xp1_miss:0, xp2_made:0, xp2_miss:0
+  };
+  return store[side][num];
+}
+function accumulate(events){
+  const s = { HOME:{}, AWAY:{} };
+  for (const e of events){
+    const side = e.side;
+    const data = e.data;
+    switch(data.type){
+      case "pass_complete": {
+        const qb = findQB(side); if (qb!=null){ const q=ensureStats(s,side,qb); q.pass_att++; q.pass_cmp++; }
+        if (data.to!=null){ const r=ensureStats(s,side,data.to); r.targets++; r.rec++; }
+        break;
+      }
+      case "pass_incomplete":{
+        const qb = findQB(side); if (qb!=null){ const q=ensureStats(s,side,qb); q.pass_att++; }
+        break;
+      }
+      case "td_pass":{
+        const qb = findQB(side); if (qb!=null){ const q=ensureStats(s,side,qb); q.pass_att++; q.pass_cmp++; q.pass_td++; }
+        if (data.to!=null){ const r=ensureStats(s,side,data.to); r.targets++; r.rec++; r.rec_td++; }
+        break;
+      }
+      case "rush":{
+        if (data.by!=null){ const r=ensureStats(s,side,data.by); r.rush_att++; }
+        break;
+      }
+      case "td_rush":{
+        if (data.by!=null){ const r=ensureStats(s,side,data.by); r.rush_att++; r.rush_td++; }
+        break;
+      }
+      case "int":{
+        const qb = findQB(side); if (qb!=null){ const q=ensureStats(s,side,qb); q.pass_att++; q.pass_int++; }
+        const d = e.defense, by = data.by; if (by!=null){ const def=ensureStats(s,d,by); def.ints++; def.pulls++; }
+        break;
+      }
+      case "pick_six":{
+        const qb = findQB(side); if (qb!=null){ const q=ensureStats(s,side,qb); q.pass_att++; q.pass_int++; }
+        const d = e.defense, by = data.by; if (by!=null){ const def=ensureStats(s,d,by); def.ints++; def.pick6++; def.pulls++; }
+        break;
+      }
+      case "sack":{
+        const d = e.defense, by = data.by; if (by!=null){ const def=ensureStats(s,d,by); def.sacks++; }
+        break;
+      }
+      case "xp1_good": { const k = findQB(side); if (k!=null) ensureStats(s,side,k).xp1_made++; break; }
+      case "xp1_bad":  { const k = findQB(side); if (k!=null) ensureStats(s,side,k).xp1_miss++; break; }
+      case "xp2_good": { const k = findQB(side); if (k!=null) ensureStats(s,side,k).xp2_made++; break; }
+      case "xp2_bad":  { const k = findQB(side); if (k!=null) ensureStats(s,side,k).xp2_miss++; break; }
+      default: break;
+    }
+  }
+  return s;
+}
+
+/*** ----- UI RENDER ----- ***/
+function formatEvent(e){
+  const rs = roster[e.side].players;
+  const rd = roster[e.side==="HOME"?"AWAY":"HOME"].players;
+  const nm = (num,def=false)=> {
+    if (num==null) return "#?";
+    const p = def ? rd[num] : rs[num];
+    return p ? `#${num} ${p.name}` : `#${num}`;
+  };
+  const t = e.data;
+  switch(t.type){
+    case "pass_complete": return `Pass complete to ${nm(t.to)}`;
+    case "pass_incomplete": return `Pass incomplete`;
+    case "td_pass": return `Touchdown pass to ${nm(t.to)}`;
+    case "rush": return `Rush by ${nm(t.by)}`;
+    case "td_rush": return `Rushing TD by ${nm(t.by)}`;
+    case "int": return `Intercepted by ${nm(t.by,true)}`;
+    case "pick_six": return `Pick six by ${nm(t.by,true)}`;
+    case "sack": return `Sack/flag pull by ${nm(t.by,true)}`;
+    case "xp1_good": return `Extra point good (1)`;
+    case "xp1_bad": return `Extra point no good (1)`;
+    case "xp2_good": return `Conversion good (2)`;
+    case "xp2_bad": return `Conversion no good (2)`;
+    case "penalty": return `Penalty`;
+    default: return `Unrecognized: "${e.raw}"`;
+  }
+}
+function renderLog(){
+  const root = document.getElementById("playLog");
+  root.innerHTML="";
+  if (!events.length) { document.getElementById("emptyLog").style.display="block"; return; }
+  document.getElementById("emptyLog").style.display="none";
+  events.forEach(ev=>{
+    const li=document.createElement("li");
+    li.className="p-2 border rounded-xl flex items-center justify-between";
+    li.innerHTML = `
+      <div>
+        <div class="text-xs text-gray-500">${ev.period} • ${ev.side}</div>
+        <div class="text-sm font-medium">${formatEvent(ev)}</div>
+        <div class="text-xs text-gray-500">"${ev.raw}"</div>
+      </div>
+      <button class="text-xs px-2 py-1 rounded-lg border">🗑</button>`;
+    li.querySelector("button").onclick = ()=>{ events = events.filter(x=>x.id!==ev.id); renderAll(); };
+    root.appendChild(li);
+  });
+}
+function statTable(side, stats){
+  const entries = Object.entries(stats[side]||{}).map(([num,s])=>({num:Number(num),...s}));
+  entries.sort((a,b)=>a.num-b.num);
+  const head = `
+    <table class="min-w-full"><thead>
+      <tr class="text-left">
+        <th class="p-1">#</th>
+        <th class="p-1">PA</th><th class="p-1">PC</th><th class="p-1">PTD</th><th class="p-1">INT</th>
+        <th class="p-1">Tgt</th><th class="p-1">Rec</th><th class="p-1">RTD</th>
+        <th class="p-1">RA</th><th class="p-1">Sacks</th><th class="p-1">Pulls</th><th class="p-1">INT(D)</th><th class="p-1">P6</th>
+        <th class="p-1">XP1+</th><th class="p-1">XP1-</th><th class="p-1">XP2+</th><th class="p-1">XP2-</th>
+      </tr></thead><tbody>`;
+  const rows = entries.map(r=>`
+      <tr class="border-t">
+        <td class="p-1 font-medium">${r.num}</td>
+        <td class="p-1">${r.pass_att}</td><td class="p-1">${r.pass_cmp}</td><td class="p-1">${r.pass_td}</td><td class="p-1">${r.pass_int}</td>
+        <td class="p-1">${r.targets}</td><td class="p-1">${r.rec}</td><td class="p-1">${r.rec_td}</td>
+        <td class="p-1">${r.rush_att}</td><td class="p-1">${r.sacks}</td><td class="p-1">${r.pulls}</td><td class="p-1">${r.ints}</td><td class="p-1">${r.pick6}</td>
+        <td class="p-1">${r.xp1_made}</td><td class="p-1">${r.xp1_miss}</td><td class="p-1">${r.xp2_made}</td><td class="p-1">${r.xp2_miss}</td>
+      </tr>`).join("");
+  return head + rows + "</tbody></table>";
+}
+function renderStats(){
+  const totals = accumulate(events);
+  document.getElementById("statsHome").innerHTML = statTable("HOME", totals);
+  document.getElementById("statsAway").innerHTML = statTable("AWAY", totals);
+}
+function renderAll(){ renderRoster("HOME"); renderRoster("AWAY"); renderLog(); renderStats(); }
+
+/*** ----- EXPORTS ----- ***/
+document.getElementById("exportCsvBtn").onclick = ()=>{
+  const header = "period,side,type,raw,data";
+  const rows = events.map(e=>[
+    e.period, e.side, e.data.type,
+    JSON.stringify(e.raw).replaceAll(",",";"),
+    JSON.stringify(e.data).replaceAll(",",";")
+  ].join(","));
+  download("plays.csv", [header,...rows].join("\\n"));
+};
+document.getElementById("exportJsonBtn").onclick = ()=>{
+  download("plays.json", JSON.stringify({ events, roster }, null, 2));
+};
+function download(name, text){
+  const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download=name; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/*** ----- TRANSCRIPT HANDLER ----- ***/
+function handleTranscript(s){
+  const data = parseTranscript(s, possession);
+  const ev = {
+    id: crypto.randomUUID(),
+    period, side: possession,
+    raw: s, data,
+    defense: possession==="HOME"?"AWAY":"HOME"
+  };
+  events.unshift(ev);
+  renderAll();
+}
+
+/*** ----- INIT ----- ***/
+renderAll();
+togglePos();
+</script>
+</body>
+</html>
