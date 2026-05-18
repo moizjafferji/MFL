@@ -513,10 +513,9 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','guests','landing','create','edit','stat'].includes(seg))
+    if (['home','profile','balance','calendar','landing','create','edit','stat'].includes(seg))
       return { page: seg };
 
-    if (seg === 'sport')   return { page:'sport',   sport: decodeURIComponent(parts[1]||'Soccer') };
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
     if (seg === 'admin' && parts[1]==='events')   return { page:'admin_events' };
     if (seg === 'admin' && parts[1]==='receipts') return { page:'admin_receipts' };
@@ -838,30 +837,6 @@ function showLoading(text){
       navItem('Profile','profile', { test: ()=> !!state.user });
       navItem('Balance','balance', { test: ()=> !!state.user });
       navItem('Calendar','calendar', { test: ()=> !!state.user });
-      navItem('Guests','guests', { test: ()=> !!state.user });
-
-      // Sports group with submenu
-      if (state.user){
-        var group = el('<div class="group"></div>');
-        var trigger = el('<button class="nav-item">Sports ▾</button>');
-        trigger.onclick = function(){
-          state.ui.sportsOpen = !state.ui.sportsOpen;
-          submenu.classList.toggle('open', state.ui.sportsOpen);
-        };
-        group.appendChild(trigger);
-
-        var submenu = el('<div class="submenu '+(state.ui.sportsOpen?'open':'')+'"></div>');
-        var sports = (state.boot && state.boot.sports) ? state.boot.sports : [];
-        if (!sports.length) sports = ['Soccer','Basketball','Volleyball','Tennis'];
-        sports.forEach(function(sp){
-          var sbtn = el('<button class="nav-item subitem">'+sp+'</button>');
-          if (state.page==='sport' && state.sport===sp) sbtn.classList.add('active');
-          sbtn.onclick = function(){ setSport(sp); };
-          submenu.appendChild(sbtn);
-        });
-        group.appendChild(submenu);
-        nav.appendChild(group);
-      }
 
       // Admin items (Events/Receipts/Stat Tracker)
 var hasAdminSports = (state.admin && state.admin.adminSports && state.admin.adminSports.length) ? true : false;
