@@ -13,10 +13,10 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 function show(data = {}) {
-  const title = data.title || 'Saifee Sports';
+  const title = data.title || 'MFL';
   const body  = data.body  || '';
-  const icon  = data.icon  || 'https://ss.meemjeem.com/favicon.ico';
-  const badge = data.badge || 'https://ss.meemjeem.com/favicon.ico';
+  const icon  = data.icon  || 'https://mflt.meemjeem.com/favicon.ico';
+  const badge = data.badge || 'https://mflt.meemjeem.com/favicon.ico';
   const tag   = data.tag   || '';
   const link  = data.link  || '/';
 
@@ -41,7 +41,7 @@ self.addEventListener('push', event => {
     const data = json.data || json.notification || json;
     event.waitUntil(show(data));
   } catch (e) {
-    event.waitUntil(show({ title: 'Saifee Sports', body: 'New update' }));
+    event.waitUntil(show({ title: 'MFL', body: 'New update' }));
   }
 });
 
