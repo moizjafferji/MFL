@@ -397,7 +397,7 @@
   <button class="hamburger" id="btnMenu">☰ Menu</button>
   <div class="brand">
     <img id="logoTop" class="logo" src="" alt="logo" onerror="this.style.display='none'"/>
-    <div>   Saifee Sports</div>
+    <div>   MFL</div>
   </div>
 </div>
 
@@ -726,7 +726,7 @@ function setSport(sp){
     }
 
     function setDocTitle(suffix){
-    document.title = suffix ? `Saifee Sports — ${suffix}` : 'Saifee Sports';
+    document.title = suffix ? `MFL — ${suffix}` : 'MFL';
 }
 
     // Session keep-alive
@@ -1024,7 +1024,7 @@ window.addEventListener('load', initNotifyBanner);
         '<div class="card stack">'+
           '<div style="display:flex;align-items:center;gap:12px">'+
             (hasLogo?('<img class="logo" src="'+state.boot.logoUrl+'" alt="logo"/>'):'')+
-            '<div style="font-size:var(--fs-xl);font-weight:800">Welcome to Saifee Sports</div>'+
+            '<div style="font-size:var(--fs-xl);font-weight:800">Welcome to MFL</div>'+
           '</div>'+
           '<div class="stack">'+
             '<div class="label">Sign In</div>'+
@@ -1636,7 +1636,7 @@ function pageBalance(){
   if(!guard()) return;
 
   var itsVal   = (state.user && state.user.its ? String(state.user.its).trim() : 'YOUR ITS');
-  var memoText = itsVal + ' - Saifee Sports';
+  var memoText = itsVal + ' - MFL';
   var email    = 'toloba@dallasjamaat.org';
 
   var node = el(
@@ -2295,7 +2295,7 @@ ${evt.address || ''}`;
 if (saveBtn) saveBtn.onclick = (ev)=> saveProfile(!!edit, ev.currentTarget);
 
     }
-    function waiverText(){ return "I HEREBY ASSUME ALL OF THE RISKS OF PARTICIPATING IN ANY/ALL ACTIVITIES ASSOCIATED WITH EVENTS BY SAIFEE SPORTS ... (same text as before)"; }
+    function waiverText(){ return "I HEREBY ASSUME ALL OF THE RISKS OF PARTICIPATING IN ANY/ALL ACTIVITIES ASSOCIATED WITH EVENTS BY MFL ... (same text as before)"; }
     function validateProfile(d, requireWaiver){
       var phone=/^\d{10}$/; var its=/^\d{8}$/; var email=/^[^@\s]+@[^@\s]+\.[^@\s]+$/;
       if(!its.test(d.its)) return 'ITS must be 8 digits';
