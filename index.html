@@ -1309,56 +1309,6 @@ async function pageHome(){
       });
     })();
         
-    // ----- Guests -----
-    (function renderGuests(){
-      const box = $('#home_guests');
-      const guestOk = guestList.filter(isFutureOngoingOrToday)
-                               .sort((a,b)=>parseDT(a.start_datetime)-parseDT(b.start_datetime));
-      if (!guestOk.length){ box.innerHTML = '<div class="muted">No upcoming events</div>'; return; }
-
-      box.innerHTML = guestOk.map(ev=>{
-        const eid  = ev.id || ev.event_id;
-        const det  = detailsById[eid] || {};
-        const live = det.live || [];
-        const mine = live.filter(r => r.is_guest && String(r.owner_its)===String(state.user.its));
-
-        if (!mine.length) return '';
-        const sub   = (ev.start_datetime ? (fmtDT(ev.start_datetime)) : '') + (ev.address ? ('<br/>' + addrHtml(ev.address)) : '');
-        return mine.map(r=>{
-          const title = (ev.sport ? (ev.sport+' - ') : '') + (ev.name||'Event') + ' — ' + (r.name || 'Guest');
-          const badge = computeStatusBadge(r.status);
-          const checked = !!r.checked_in_at;
-          const can = (String(r.status||'').toLowerCase()==='active') && withinCheckInWindow(ev) && !checked;
-          const btnHtml = checked
-            ? "<button class='btn js-checkin-btn checked-in' disabled data-start='"+(ev.start_datetime||'')+"' data-end='"+(ev.end_datetime||"")+"'>Checked In</button>"
-            : (can ? "<button class='btn js-checkin-btn' data-eid='"+eid+"' data-gi='"+r.person+"' data-start='"+(ev.start_datetime||'')+"' data-end='"+(ev.end_datetime||"")+"'>Check In</button>" : "");
-
-          return ''+
-            '<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
-              '<div><b>'+title+'</b><div class="tiny">'+sub+'</div></div>'+
-              '<div style="display:flex;gap:8px;align-items:center">'+
-                (badge||'')+
-                btnHtml+
-                '<button class="btn secondary" data-act="view" data-eid="'+eid+'">View</button>'+
-              '</div>'+
-            '</div>';
-        }).join('');
-      }).join('');
-
-      // Wire buttons (deep link)
-      box.querySelectorAll('[data-act="view"]').forEach(b=>{
-        b.addEventListener('click', ()=>{
-          const id = b.getAttribute('data-eid');
-          if (id) router.navigate('event', { id });
-        });
-      });
-      box.querySelectorAll('.js-checkin-btn[data-gi]').forEach(btn=>{
-        const eid = btn.getAttribute('data-eid');
-        const gi  = btn.getAttribute('data-gi');
-        btn.addEventListener('click', ()=> doCheckIn(eid, gi, btn));
-      });
-    })();
-
     // ----- Upcoming (simple list, all ready) -----
     (function renderUpcoming(){
       const list = upcomingRes && (upcomingRes.events || upcomingRes) || [];
