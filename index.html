@@ -1911,6 +1911,16 @@ async function openEvent(id){
         "</div>"+
 
         "<div class='card stack'>"+
+          "<div class='label'>Manage your guests for this event</div>"+
+          "<select id='gx_sel' class='input'><option value=''>Select a guest…</option></select>"+
+          "<div style='display:flex;gap:8px;flex-wrap:wrap'>"+
+            "<button class='btn' id='reg_guest'>Register Guest</button>"+
+          "</div>"+
+          "<div class='tiny' id='gx_hint'></div>"+
+          "<div id='my_guest_list' class='stack' style='margin-top:6px'></div>"+
+        "</div>"+
+
+        "<div class='card stack'>"+
           "<div class='label'>Live Roster List</div>"+
           "<div id='live_list'></div>"+
           "<div class='tiny' id='cap_hint'></div>"+
@@ -2065,6 +2075,14 @@ ${evt.address || ''}`;
           });
         });
       }
+
+      // Register guest button (pass the button)
+      $('#reg_guest').onclick  = function(ev){
+        const v = (sel && sel.value || '').trim();
+        if(!/^\d{8}$/.test(v)){ alert('Please select a guest.'); return; }
+        actRegister(id, true, ev.currentTarget);
+      };
+    })();
 
     // 6) Live roster — per-row Remove (admins only; "Captain" NOT allowed)
     (function renderLive(){
