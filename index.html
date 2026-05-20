@@ -1849,10 +1849,9 @@ async function openEvent(id){
 
   try{
     // 1) Load everything we need up front (in parallel)
-    const [details, statuses, guestsRes] = await Promise.all([
+    const [details, statuses] = await Promise.all([
       gs('api_eventDetails', id),
       gs('api_myStatusesForEvents', state.user.its, [id]),
-      gs('api_listGuests', state.user.its)
     ]);
 
     // 2) Normalize data
@@ -2011,68 +2010,9 @@ ${evt.address || ''}`;
 })();
 
 
-    // 5) Guests (use preloaded list; no fetch on render)
-    (function renderGuests(){
-      const guests = (guestsRes && guestsRes.guests) || [];
-      const sel  = $('#gx_sel'); 
-      const hint = $('#gx_hint');
-      guests.forEach(gu=>{
-        const opt = document.createElement('option');
-        opt.value = gu.guest_its;
-        opt.textContent = gu.first_name+' '+gu.last_name+' — ITS '+gu.guest_its;
-        sel.appendChild(opt);
-      });
-      if(!guests.length){ hint.textContent = 'No saved guests yet. Add guests on the Guests tab.'; }
-      if(!regOpen || !guests.length){ sel.disabled = true; $('#reg_guest').disabled = true; }
+    
 
-      // Show my guests for this event
-      const mine = live.filter(r => r.is_guest && String(r.owner_its)===String(state.user.its));
-      const gl = $('#my_guest_list');
-      if (!mine.length){
-        gl.innerHTML = "<div class='muted tiny'>No guests of yours are on this event yet.</div>";
-      } else {
-        gl.innerHTML = mine.map(r=>{
-          const st = String(r.status||'').toLowerCase();
-          const statusBadge = (st==='active') ? " <span class='badge ok'>Active</span>" :
-                              (st==='waitlist') ? " <span class='badge warn'>Waitlist</span>" :
-                              (st==='dropout') ? " <span class='badge warn'>Dropped Out</span>" : "";
-          const checkinBadge = computeCheckinPill(r);
-          const canDereg = ((regOpen && (st==='active' || st==='waitlist')) || (!regOpen && st==='waitlist'));
-          const canDrop  = (afterClose && st==='active');
-          return ""+
-          "<div class='event-card' style='padding:8px;margin-top:6px'>"+
-            "<div style='display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap'>"+
-              "<div><b>"+r.name+"</b> "+statusBadge+" "+checkinBadge+"</div>"+
-              "<div class='event-actions'>"+
-                "<button class='btn secondary' data-gi='"+r.person+"' data-act='g-dereg' "+(canDereg?'':'disabled')+">Deregister</button>"+
-                "<button class='btn secondary' data-gi='"+r.person+"' data-act='g-drop' "+(canDrop?'':'disabled')+">Dropout</button>"+
-              "</div>"+
-            "</div>"+
-          "</div>";
-        }).join('');
-
-        // Use click-lock aware wrappers (pass the button)
-        gl.querySelectorAll('[data-act="g-dereg"]').forEach(b=>{
-          b.addEventListener('click', (ev)=> {
-            const guestIts = b.getAttribute('data-gi');
-            actDeregister(evt.id, guestIts, ev.currentTarget);
-          });
-        });
-        gl.querySelectorAll('[data-act="g-drop"]').forEach(b=>{
-          b.addEventListener('click', (ev)=> {
-            const guestIts = b.getAttribute('data-gi');
-            actDropout(evt.id, guestIts, ev.currentTarget);
-          });
-        });
-      }
-
-      // Register guest button (pass the button)
-      $('#reg_guest').onclick  = function(ev){
-        const v = (sel && sel.value || '').trim();
-        if(!/^\d{8}$/.test(v)){ alert('Please select a guest.'); return; }
-        actRegister(id, true, ev.currentTarget);
-      };
-    })();
+        
 
     // 6) Live roster — per-row Remove (admins only; "Captain" NOT allowed)
     (function renderLive(){
