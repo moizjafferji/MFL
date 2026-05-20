@@ -1911,6 +1911,16 @@ async function openEvent(id){
         "</div>"+
 
         "<div class='card stack'>"+
+          "<div class='label'>Manage your guests for this event</div>"+
+          "<select id='gx_sel' class='input'><option value=''>Select a guest…</option></select>"+
+          "<div style='display:flex;gap:8px;flex-wrap:wrap'>"+
+            "<button class='btn' id='reg_guest'>Register Guest</button>"+
+          "</div>"+
+          "<div class='tiny' id='gx_hint'></div>"+
+          "<div id='my_guest_list' class='stack' style='margin-top:6px'></div>"+
+        "</div>"+
+
+        "<div class='card stack'>"+
           "<div class='label'>Live Roster List</div>"+
           "<div id='live_list'></div>"+
           "<div class='tiny' id='cap_hint'></div>"+
