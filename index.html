@@ -1639,54 +1639,6 @@ function pageBalance(){
       google.script.run.withSuccessHandler(function(res){ $('#cal').src=res.url; }).api_calendarEmbedUrl();
     }
 
-    /* ===================== GUESTS ===================== */
-    function pageGuests(){ if(!guard())return;
-      var node=el(
-        '<div class="stack">'+
-          '<div class="card stack">'+
-            '<div class="label">Add Guest</div>'+
-            '<input id="g_its" class="input" placeholder="ITS (8 digits)">'+
-            '<input id="g_first" class="input" placeholder="First Name">'+
-            '<input id="g_last" class="input" placeholder="Last Name">'+
-            '<input id="g_talent" class="input" placeholder="Talent Rating (1–10)" type="number" min="1" max="10">'+
-            '<button class="btn" id="g_add">Add</button>'+
-            '<div class="tiny" id="g_err" style="color:var(--err)"></div>'+
-          '</div>'+
-          '<div class="card stack">'+
-            '<div class="label">Your Guests</div>'+
-            '<div id="g_list" class="stack tiny">Loading…</div>'+
-          '</div>'+
-        '</div>'
-      );
-      layout(node);
-      $('#g_add').onclick = function(){
-        var its=($('#g_its').value||'').trim();
-        var first=($('#g_first').value||'').trim();
-        var last=($('#g_last').value||'').trim();
-        var talent=Number($('#g_talent').value||0);
-        var err=$('#g_err'); err.textContent='';
-        if(!/^\d{8}$/.test(its)) { err.textContent='Guest ITS must be 8 digits'; return; }
-        if(!first) { err.textContent='First Name is required'; return; }
-        if(!last) { err.textContent='Last Name is required'; return; }
-        if(!(talent>=1&&talent<=10)) { err.textContent='Talent must be between 1 and 10'; return; }
-        google.script.run.withSuccessHandler(function(r){
-          if(!r.ok){ err.textContent=r.error||'Failed to add'; return; }
-          $('#g_its').value=''; $('#g_first').value=''; $('#g_last').value=''; $('#g_talent').value='';
-          refreshGuests();
-        }).api_addGuest(state.user.its, { guest_its:its, first_name:first, last_name:last, talent:talent });
-      };
-      function refreshGuests(){
-        google.script.run.withSuccessHandler(function(res){
-          var box=$('#g_list');
-          var rows=(res.guests||[]).map(function(g){
-            return "<div style='padding:6px 0;border-bottom:1px solid var(--border)'>"+g.first_name+" "+g.last_name+" — ITS "+g.guest_its+" — Talent "+g.talent+"</div>";
-          }).join('');
-          box.innerHTML=rows||'<div class="muted">No guests</div>';
-        }).api_listGuests(state.user.its);
-      }
-      refreshGuests();
-    }
-
     /* ===================== SPORT PAGE ===================== */
     async function pageSport(){ 
   if(!guard()) return;
@@ -1911,16 +1863,6 @@ async function openEvent(id){
         "</div>"+
 
         "<div class='card stack'>"+
-          "<div class='label'>Manage your guests for this event</div>"+
-          "<select id='gx_sel' class='input'><option value=''>Select a guest…</option></select>"+
-          "<div style='display:flex;gap:8px;flex-wrap:wrap'>"+
-            "<button class='btn' id='reg_guest'>Register Guest</button>"+
-          "</div>"+
-          "<div class='tiny' id='gx_hint'></div>"+
-          "<div id='my_guest_list' class='stack' style='margin-top:6px'></div>"+
-        "</div>"+
-
-        "<div class='card stack'>"+
           "<div class='label'>Live Roster List</div>"+
           "<div id='live_list'></div>"+
           "<div class='tiny' id='cap_hint'></div>"+
@@ -2021,45 +1963,7 @@ ${evt.address || ''}`;
 })();
 
 
-    // 5) Guests (use preloaded list; no fetch on render)
-    (function renderGuests(){
-      const guests = (guestsRes && guestsRes.guests) || [];
-      const sel  = $('#gx_sel'); 
-      const hint = $('#gx_hint');
-      guests.forEach(gu=>{
-        const opt = document.createElement('option');
-        opt.value = gu.guest_its;
-        opt.textContent = gu.first_name+' '+gu.last_name+' — ITS '+gu.guest_its;
-        sel.appendChild(opt);
-      });
-      if(!guests.length){ hint.textContent = 'No saved guests yet. Add guests on the Guests tab.'; }
-      if(!regOpen || !guests.length){ sel.disabled = true; $('#reg_guest').disabled = true; }
-
-      // Show my guests for this event
-      const mine = live.filter(r => r.is_guest && String(r.owner_its)===String(state.user.its));
-      const gl = $('#my_guest_list');
-      if (!mine.length){
-        gl.innerHTML = "<div class='muted tiny'>No guests of yours are on this event yet.</div>";
-      } else {
-        gl.innerHTML = mine.map(r=>{
-          const st = String(r.status||'').toLowerCase();
-          const statusBadge = (st==='active') ? " <span class='badge ok'>Active</span>" :
-                              (st==='waitlist') ? " <span class='badge warn'>Waitlist</span>" :
-                              (st==='dropout') ? " <span class='badge warn'>Dropped Out</span>" : "";
-          const checkinBadge = computeCheckinPill(r);
-          const canDereg = ((regOpen && (st==='active' || st==='waitlist')) || (!regOpen && st==='waitlist'));
-          const canDrop  = (afterClose && st==='active');
-          return ""+
-          "<div class='event-card' style='padding:8px;margin-top:6px'>"+
-            "<div style='display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap'>"+
-              "<div><b>"+r.name+"</b> "+statusBadge+" "+checkinBadge+"</div>"+
-              "<div class='event-actions'>"+
-                "<button class='btn secondary' data-gi='"+r.person+"' data-act='g-dereg' "+(canDereg?'':'disabled')+">Deregister</button>"+
-                "<button class='btn secondary' data-gi='"+r.person+"' data-act='g-drop' "+(canDrop?'':'disabled')+">Dropout</button>"+
-              "</div>"+
-            "</div>"+
-          "</div>";
-        }).join('');
+    
 
         // Use click-lock aware wrappers (pass the button)
         gl.querySelectorAll('[data-act="g-dereg"]').forEach(b=>{
