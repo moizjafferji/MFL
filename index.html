@@ -1641,11 +1641,9 @@ function pageBalance(){
       var node=el(
         '<div class="stack">'+
           '<div class="card">'+
-            '<div class="label" style="margin-bottom:8px">Upcoming Schedule</div>'+
             '<iframe src="'+agendaUrl+'" class="w-full" style="height:400px;border:0;border-radius:12px"></iframe>'+
           '</div>'+
           '<div class="card">'+
-            '<div class="label" style="margin-bottom:8px">Monthly View</div>'+
             '<iframe src="'+calUrl+'" class="w-full" style="height:70vh;border:0;border-radius:12px"></iframe>'+
           '</div>'+
         '</div>'
@@ -1929,6 +1927,25 @@ async function openEvent(id){
           "</div>"+
         "</div>"+
 
+        "<div class='card stack' id='sponsorship_card'>"+
+          "<div class='label'>Sponsorship</div>"+
+          "<div class='event-actions' style='flex-wrap:wrap'>"+
+            "<button class='btn sponsor-btn' data-amount='453'  data-memo='Bronze Sponsorship'>$453<br/><span style='font-size:var(--fs-xs);opacity:.75'>Bronze</span></button>"+
+            "<button class='btn sponsor-btn' data-amount='786'  data-memo='Silver Sponsorship'>$786<br/><span style='font-size:var(--fs-xs);opacity:.75'>Silver</span></button>"+
+            "<button class='btn sponsor-btn' data-amount='1253' data-memo='Gold Sponsorship'>$1253<br/><span style='font-size:var(--fs-xs);opacity:.75'>Gold</span></button>"+
+          "</div>"+
+          "<div class='event-actions' style='flex-wrap:wrap'>"+
+            "<button class='btn secondary sponsor-btn' data-amount='21'  data-memo='Jaman Hub'>$21<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
+            "<button class='btn secondary sponsor-btn' data-amount='53'  data-memo='Jaman Hub'>$53<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
+            "<button class='btn secondary sponsor-btn' data-amount='110' data-memo='Jaman Hub'>$110<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
+          "</div>"+
+          "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'>"+
+            "<input id='sponsor_custom' class='input' type='number' min='1' placeholder='Custom amount ($)' style='max-width:180px'>"+
+            "<button class='btn secondary' id='sponsor_custom_btn'>Jaman Hub</button>"+
+          "</div>"+
+          "<div class='tiny' id='sponsor_err' style='color:var(--err)'></div>"+
+        "</div>"+
+
         "<div class='card stack'>"+
           "<div class='label'>Live Roster List</div>"+
           "<div id='live_list'></div>"+
@@ -1964,6 +1981,41 @@ ${evt.address || ''}`;
     // Wire "Add Balance" button
     const addBalBtn = document.getElementById('btn_add_balance');
     if (addBalBtn) addBalBtn.onclick = () => router.navigate('balance');
+
+    // Wire Sponsorship buttons
+    (function wireSponsorships(){
+      function processDonation(amount, memo, btn){
+        const amtNum = Number(amount);
+        if (!amtNum || amtNum <= 0) { document.getElementById('sponsor_err').textContent = 'Enter a valid amount.'; return; }
+        if (!confirm('Confirm donation of $' + amtNum.toFixed(2) + ' for "' + memo + '"?\n\nThis will be charged from your balance.')) return;
+        document.getElementById('sponsor_err').textContent = '';
+        const origText = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
+        google.script.run
+          .withSuccessHandler(function(res){
+            if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+            if (!res || !res.ok){ document.getElementById('sponsor_err').textContent = (res && res.error) || 'Donation failed.'; return; }
+            alert('Donation of $' + amtNum.toFixed(2) + ' processed! Thank you.');
+          })
+          .withFailureHandler(function(e){
+            if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+            document.getElementById('sponsor_err').textContent = (e && e.message) || 'Donation failed.';
+          })
+          .api_donate(state.user.its, amtNum, memo);
+      }
+
+      // Preset buttons
+      document.querySelectorAll('.sponsor-btn').forEach(function(btn){
+        btn.onclick = function(){ processDonation(btn.dataset.amount, btn.dataset.memo, btn); };
+      });
+
+      // Custom amount button
+      const customBtn = document.getElementById('sponsor_custom_btn');
+      if (customBtn) customBtn.onclick = function(){
+        const val = (document.getElementById('sponsor_custom').value || '').trim();
+        processDonation(val, 'Jaman Hub', customBtn);
+      };
+    })();
 
     // 4) Wire "Your Registration" buttons based on current status (pass clicked button)
     (function applySelfButtons(){
