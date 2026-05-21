@@ -1636,8 +1636,20 @@ function pageBalance(){
 
     /* ===================== CALENDAR ===================== */
     function pageCalendar(){ if(!guard())return;
+      var agendaUrl = 'https://calendar.google.com/calendar/u/0/embed?mode=agenda&height=600&wkst=1&ctz=America/Chicago&showPrint=0&title=Saifee+Sports&src=bzh0czc3c2ttcmVpNGoxb2o3bTc4dW10OWdAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ&color=%23d50000';
       var calUrl = 'https://calendar.google.com/calendar/u/0/embed?height=600&wkst=1&ctz=America/Chicago&showPrint=0&title=Saifee+Sports&src=bzh0czc3c2ttcmVpNGoxb2o3bTc4dW10OWdAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ&src=ZmgwaDkwaWMybGhoc3N0NjA4OGYycmxoYzhAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ&src=ZW4udXNhI2hvbGlkYXlAZ3JvdXAudi5jYWxlbmRhci5nb29nbGUuY29t&color=%23d50000&color=%234285f4&color=%237cb342';
-      var node=el('<div class="card"><iframe id="cal" src="'+calUrl+'" class="w-full" style="height:70vh;border:0;border-radius:12px"></iframe></div>');
+      var node=el(
+        '<div class="stack">'+
+          '<div class="card">'+
+            '<div class="label" style="margin-bottom:8px">Upcoming Schedule</div>'+
+            '<iframe src="'+agendaUrl+'" class="w-full" style="height:400px;border:0;border-radius:12px"></iframe>'+
+          '</div>'+
+          '<div class="card">'+
+            '<div class="label" style="margin-bottom:8px">Monthly View</div>'+
+            '<iframe src="'+calUrl+'" class="w-full" style="height:70vh;border:0;border-radius:12px"></iframe>'+
+          '</div>'+
+        '</div>'
+      );
       layout(node);
     }
 
