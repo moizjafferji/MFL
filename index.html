@@ -485,6 +485,8 @@ var router = {
       case 'profile':         return '#/profile';
       case 'balance':         return '#/balance';
       case 'calendar':        return '#/calendar';
+      case 'jersey':          return '#/jersey';
+      case 'sponsor':         return '#/sponsor';
       case 'guests':          return '#/guests';
       case 'sport':           return '#/sport/' + encodeURIComponent((opts && opts.sport) || state.sport || 'Soccer');
       case 'admin_events':    return '#/admin/events';
@@ -513,7 +515,7 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','landing','create','edit','stat'].includes(seg))
+    if (['home','profile','balance','calendar','jersey','sponsor','landing','create','edit','stat'].includes(seg))
       return { page: seg };
 
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
@@ -837,6 +839,8 @@ function showLoading(text){
       navItem('Profile','profile', { test: ()=> !!state.user });
       navItem('Balance','balance', { test: ()=> !!state.user });
       navItem('Calendar','calendar', { test: ()=> !!state.user });
+      navItem('Jersey','jersey',     { test: ()=> !!state.user });
+      navItem('Sponsor','sponsor',   { test: ()=> !!state.user });
 
       // Admin items (Events/Receipts/Stat Tracker)
 var hasAdminSports = (state.admin && state.admin.adminSports && state.admin.adminSports.length) ? true : false;
@@ -1651,6 +1655,546 @@ function pageBalance(){
       layout(node);
     }
 
+    }
+
+    /* ===================== JERSEY ===================== */
+    var JERSEY_PRICES = [
+      { label: '$20 – Short Sleeve Athletic Shirt',               amount: 20,  memo: 'Jersey: Short Sleeve Athletic',         sleeves:'Short', hood:'without Hood' },
+      { label: '$25 – Long Sleeve Athletic Shirt',                amount: 25,  memo: 'Jersey: Long Sleeve Athletic',          sleeves:'Long',  hood:'without Hood' },
+      { label: '$25 – Short Sleeve with Hood Athletic Shirt',     amount: 25,  memo: 'Jersey: Short Sleeve with Hood Athletic', sleeves:'Short',hood:'with Hood'    },
+      { label: '$30 – Long Sleeve with Hood Athletic Shirt',      amount: 30,  memo: 'Jersey: Long Sleeve with Hood Athletic',  sleeves:'Long', hood:'with Hood'    },
+      { label: '$15 – Cotton Single Color Shirt w/ Screen Print', amount: 15,  memo: 'Jersey: Cotton Screen Print',            sleeves:null,   hood:null           },
+      { label: '$35 – MFL Cold Weather Hoodie',                   amount: 35,  memo: 'Jersey: MFL Cold Weather Hoodie',        sleeves:null,   hood:null           }
+    ];
+
+    function pageJersey(){ if(!guard()) return;
+      showLoading('Loading jerseys…');
+      google.script.run
+        .withSuccessHandler(function(res){
+          if (!res || !res.ok){ layout(el('<div class="card" style="color:var(--err)">Failed to load jersey info.</div>')); return; }
+          _renderJerseyPage(res);
+        })
+        .withFailureHandler(function(e){
+          layout(el('<div class="card" style="color:var(--err)">'+(e&&e.message||'Failed to load jersey info.')+'</div>'));
+        })
+        .api_getJerseyInfo(state.user.its);
+    }
+
+    function _renderJerseyPage(res){
+      res = res || {};
+      var root = document.createElement('div');
+      root.className = 'stack';
+
+      /* ---- "Your Shirt" info card (always visible) ---- */
+      root.appendChild(_buildShirtCard({
+        idPrefix:   'jr0',
+        cardTitle:  'Your Shirt',
+        isHoodie:   false,
+        isMandatory: true,
+        onSave: function(payload, btn, errEl){
+          withClickLock('jersey:shirt0:'+state.user.its, btn, 'Saving…', function(done){
+            google.script.run
+              .withSuccessHandler(function(r){
+                done();
+                if(!r||!r.ok){ if(errEl) errEl.textContent=(r&&r.error)||'Save failed.'; return; }
+                if(errEl) errEl.textContent='';
+                var orig=btn.innerHTML; btn.innerHTML='✓ Saved';
+                setTimeout(function(){ btn.innerHTML=orig; }, 1800);
+              })
+              .withFailureHandler(function(e){ done(); if(errEl) errEl.textContent=(e&&e.message)||'Save failed.'; })
+              .api_saveJerseyProfile(state.user.its, payload);
+          });
+        }
+      }, res.profile || {}));
+
+      /* ---- Purchase buttons card ---- */
+      var purchaseCard = document.createElement('div');
+      purchaseCard.className = 'card stack';
+      purchaseCard.id = 'jr_purchase_card';
+      var btnRows = JERSEY_PRICES.map(function(opt, i){
+        return '<button class="btn secondary jr-price-btn" data-idx="'+i+'" style="text-align:left;justify-content:flex-start">'+_esc(opt.label)+'</button>';
+      }).join('');
+      purchaseCard.innerHTML =
+        '<div class="label">Purchase a Shirt</div>'+
+        '<div class="stack" style="gap:8px">'+btnRows+'</div>'+
+        '<div class="tiny" id="jr_buy_err" style="color:var(--err);margin-top:4px"></div>';
+      root.appendChild(purchaseCard);
+
+      /* ---- Purchased shirt config cards (persistent) ---- */
+      var configWrap = document.createElement('div');
+      configWrap.id = 'jr_config_wrap';
+      configWrap.className = 'stack';
+
+      var purchases = res.purchases || [];
+      purchases.forEach(function(p, i){
+        configWrap.appendChild(_buildPurchasedShirtCard(i+1, p));
+      });
+      root.appendChild(configWrap);
+
+      layout(root);
+
+      /* Wire purchase buttons */
+      root.querySelectorAll('.jr-price-btn').forEach(function(btn){
+        btn.onclick = function(){
+          var opt = JERSEY_PRICES[Number(btn.dataset.idx)];
+          if (!opt) return;
+          var errEl = document.getElementById('jr_buy_err');
+          if (!confirm('Purchase "'+opt.label+'" for $'+opt.amount.toFixed(2)+'?\n\nThis will be deducted from your balance.')) return;
+          if(errEl) errEl.textContent='';
+          btn.disabled = true;
+          var origHTML = btn.innerHTML;
+          btn.innerHTML = 'Processing…';
+          google.script.run
+            .withSuccessHandler(function(r){
+              btn.disabled=false; btn.innerHTML=origHTML;
+              if(!r||!r.ok){ if(errEl) errEl.textContent=(r&&r.error)||'Purchase failed. Please try again.'; return; }
+              /* Add a new config card */
+              var wrap = document.getElementById('jr_config_wrap');
+              if(wrap){
+                var num = wrap.children.length + 1;
+                wrap.appendChild(_buildPurchasedShirtCard(num, { purchase_idx: r.purchase_idx, memo: opt.memo, sleeves: opt.sleeves, hood: opt.hood }));
+              }
+            })
+            .withFailureHandler(function(e){
+              btn.disabled=false; btn.innerHTML=origHTML;
+              if(errEl) errEl.textContent=(e&&e.message)||'Purchase failed. Please try again.';
+            })
+            .api_purchaseJerseyShirt(state.user.its, opt.amount, opt.memo);
+        };
+      });
+    }
+
+    /* Build a config card for a purchased jersey shirt */
+    function _buildPurchasedShirtCard(num, purchaseData){
+      purchaseData = purchaseData || {};
+      var isHoodie = (purchaseData.memo || '').toLowerCase().indexOf('hoodie') !== -1;
+      var isCotton = (purchaseData.memo || '').toLowerCase().indexOf('cotton') !== -1;
+      var isSpecial = isHoodie || isCotton;
+
+      var card;
+      if (isSpecial){
+        /* Cotton / Hoodie: only Type + Size */
+        card = _buildShirtCard({
+          idPrefix:   'jrp'+num,
+          cardTitle:  'Shirt '+num+' Details — '+_esc(purchaseData.memo||''),
+          isHoodie:   true,
+          isMandatory: false,
+          onSave: function(payload, btn, errEl){
+            payload.purchase_idx = purchaseData.purchase_idx;
+            _saveJerseyPurchaseConfig(num, payload, btn, errEl);
+          }
+        }, purchaseData);
+      } else {
+        /* Athletic — prefill sleeves/hood from the chosen price tier */
+        var prefilled = Object.assign({}, purchaseData);
+        card = _buildShirtCard({
+          idPrefix:   'jrp'+num,
+          cardTitle:  'Shirt '+num+' Details — '+_esc(purchaseData.memo||''),
+          isHoodie:   false,
+          isMandatory: false,
+          onSave: function(payload, btn, errEl){
+            payload.purchase_idx = purchaseData.purchase_idx;
+            _saveJerseyPurchaseConfig(num, payload, btn, errEl);
+          }
+        }, prefilled);
+      }
+
+      return card;
+    }
+
+    function _saveJerseyPurchaseConfig(num, payload, btn, errEl){
+      function setErr(m){ if(errEl) errEl.textContent=m||''; }
+      withClickLock('jersey:purchase:'+num+':'+state.user.its, btn, 'Saving…', function(done){
+        google.script.run
+          .withSuccessHandler(function(r){
+            done();
+            if(!r||!r.ok){ setErr((r&&r.error)||'Save failed.'); return; }
+            setErr('');
+            var orig=btn.innerHTML; btn.innerHTML='✓ Saved';
+            setTimeout(function(){ btn.innerHTML=orig; }, 1800);
+          })
+          .withFailureHandler(function(e){ done(); setErr((e&&e.message)||'Save failed.'); })
+          .api_saveJerseyPurchaseConfig(state.user.its, payload);
+      });
+    }
+
+    /* ===================== SPONSOR ===================== */
+    function pageSponsor(){ if(!guard())return;
+      var u = state.user || {};
+      showLoading('Loading sponsorship…');
+
+      google.script.run
+        .withSuccessHandler(function(res){
+          if (!res || !res.ok){ layout(el('<div class="card" style="color:var(--err)">Failed to load sponsorship info.</div>')); return; }
+          _renderSponsorPage(res);
+        })
+        .withFailureHandler(function(e){
+          layout(el('<div class="card" style="color:var(--err)">'+(e && e.message || 'Failed to load sponsorship info.')+'</div>'));
+        })
+        .api_getSponsorInfo(u.its);
+    }
+
+    function _renderSponsorPage(res){
+      var u = state.user || {};
+
+      // Determine sponsorship level from this calendar year
+      // res.level: 'gold' | 'silver' | 'bronze' | 'jaman_hub' | null
+      // res.address, res.business_name, res.business_logo_url
+      var level      = (res.level || '').toLowerCase();
+      var isGold     = level === 'gold';
+      var isSilver   = level === 'silver';
+      var isBronze   = level === 'bronze';
+      var isJaman    = level === 'jaman_hub';
+      var hasSponsor = isGold || isSilver || isBronze || isJaman;
+
+      var levelColors = { gold: '#f59e0b', silver: '#9fb3c8', bronze: '#cd7f32' };
+      var levelColor  = levelColors[level] || 'var(--accent)';
+      var levelLabel  = isGold ? 'Gold Sponsor' : isSilver ? 'Silver Sponsor' : isBronze ? 'Bronze Sponsor' : isJaman ? 'Jaman Hub' : '';
+
+      var root = document.createElement('div');
+      root.className = 'stack';
+
+      /* ---- Header card ---- */
+      var headerCard = document.createElement('div');
+      headerCard.className = 'card stack';
+
+      if (!hasSponsor){
+        headerCard.innerHTML =
+          '<div style="font-size:var(--fs-lg);font-weight:700;margin-bottom:4px">We\'d be honored if you Sponsor MFL 10</div>'+
+          '<div class="muted" style="margin-bottom:12px">Choose a sponsorship level below to get started.</div>'+
+          _sponsorButtonsHTML('sp_page');
+      } else if (isJaman){
+        headerCard.innerHTML =
+          '<div style="font-size:var(--fs-xl);font-weight:800;color:'+levelColor+'">JazakAllah!</div>'+
+          '<div class="muted">Thank you for your Jaman Hub sponsorship this year.</div>';
+      } else {
+        headerCard.innerHTML =
+          '<div style="font-size:var(--fs-xl);font-weight:800;color:'+levelColor+'">'+levelLabel+'</div>'+
+          '<div class="muted">Thank you for sponsoring MFL this year!</div>';
+      }
+      root.appendChild(headerCard);
+
+      /* ---- If not yet sponsored, show card and stop ---- */
+      if (!hasSponsor){
+        _wireSponsorButtons(root, 'sp_page', null);
+        layout(root);
+        return;
+      }
+
+      /* ---- Business info card ---- */
+      var infoCard = document.createElement('div');
+      infoCard.className = 'card stack';
+      infoCard.id = 'sp_info_card';
+
+      var logoHtml = '';
+      if (res.business_logo_url){
+        logoHtml =
+          '<div id="sp_logo_wrap" style="width:160px;border-radius:10px;overflow:hidden;background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.15);margin-bottom:6px">'+
+            '<img id="sp_logo_img" alt="Business logo" style="width:100%;display:block;" />'+
+          '</div>';
+      }
+
+      infoCard.innerHTML =
+        '<div class="label">Your Sponsor Profile</div>'+
+        logoHtml+
+        '<div class="form-grid">'+
+          '<div class="stack"><label class="label">Business Name</label>'+
+            '<input id="sp_biz_name" class="input" placeholder="Business Name" value="'+_esc(res.business_name||'')+'"></div>'+
+          '<div class="stack"><label class="label">Personal Address</label>'+
+            '<input id="sp_address" class="input" placeholder="123 Main St, City, TX 75001" value="'+_esc(res.address||'')+'"></div>'+
+          '<div class="stack"><label class="label">Upload New Logo</label>'+
+            '<input id="sp_logo_file" type="file" accept="image/*" class="input">'+
+            '<div class="tiny muted">If no new logo is uploaded, your previous year\'s logo will be used.</div>'+
+          '</div>'+
+        '</div>'+
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">'+
+          '<button class="btn" id="sp_save_btn">Save Profile</button>'+
+          '<div class="tiny" id="sp_save_err" style="color:var(--err)"></div>'+
+        '</div>';
+
+      root.appendChild(infoCard);
+
+      /* ---- Shirt + Hoodie cards ---- */
+      var shirtCount = isGold || isSilver ? 2 : isBronze ? 1 : 0;
+      for (var s = 1; s <= shirtCount; s++){
+        root.appendChild(_buildShirtCard({
+          idPrefix:  'sp'+s,
+          cardTitle: 'Sponsor Shirt '+s,
+          isHoodie:  false,
+          isMandatory: false,
+          onSave: _makeSponsorShirtSaver('sponsor', s)
+        }, res['shirt'+s] || {}));
+        root.appendChild(_buildShirtCard({
+          idPrefix:  'sp'+s+'h',
+          cardTitle: 'Hoodie '+s,
+          isHoodie:  true,
+          isMandatory: false,
+          onSave: _makeSponsorShirtSaver('sponsor_hoodie', s)
+        }, res['hoodie'+s] || {}));
+      }
+
+      layout(root);
+
+      /* Wire logo preview */
+      if (res.business_logo_url){
+        var logoImg = document.getElementById('sp_logo_img');
+        var logoWrap = document.getElementById('sp_logo_wrap');
+        if (logoImg && logoWrap){
+          logoImg.src = res.business_logo_url;
+          logoImg.onload  = function(){ logoWrap.style.display = 'block'; };
+          logoImg.onerror = function(){ logoWrap.style.display = 'none'; };
+        }
+      }
+
+      /* Wire Save Profile button */
+      var saveBtn = document.getElementById('sp_save_btn');
+      if (saveBtn) saveBtn.onclick = function(){ _saveSponsorProfile(saveBtn); };
+    }
+
+    /* Shared escape helper */
+    function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+    /* Sponsorship buttons HTML — idPrefix keeps IDs unique per context */
+    function _sponsorButtonsHTML(idPrefix){
+      return "<div class='event-actions' style='flex-wrap:wrap'>"+
+          "<button class='btn sponsor-btn' data-amount='453'  data-memo='Bronze Sponsorship'>$453<br/><span style='font-size:var(--fs-xs);opacity:.75'>Bronze</span></button>"+
+          "<button class='btn sponsor-btn' data-amount='786'  data-memo='Silver Sponsorship'>$786<br/><span style='font-size:var(--fs-xs);opacity:.75'>Silver</span></button>"+
+          "<button class='btn sponsor-btn' data-amount='1253' data-memo='Gold Sponsorship'>$1253<br/><span style='font-size:var(--fs-xs);opacity:.75'>Gold</span></button>"+
+        "</div>"+
+        "<div class='event-actions' style='flex-wrap:wrap'>"+
+          "<button class='btn secondary sponsor-btn' data-amount='21'  data-memo='Jaman Hub'>$21<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
+          "<button class='btn secondary sponsor-btn' data-amount='53'  data-memo='Jaman Hub'>$53<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
+          "<button class='btn secondary sponsor-btn' data-amount='110' data-memo='Jaman Hub'>$110<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
+        "</div>"+
+        "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'>"+
+          "<input id='"+idPrefix+"_custom' class='input' type='number' min='1' placeholder='Custom amount ($)' style='max-width:180px'>"+
+          "<button class='btn secondary' id='"+idPrefix+"_custom_btn'>Jaman Hub</button>"+
+        "</div>"+
+        "<div class='tiny' id='"+idPrefix+"_err' style='color:var(--err)'></div>";
+    }
+
+    /* Wire sponsor buttons inside a given container — after render, page refreshes on success */
+    function _wireSponsorButtons(container, idPrefix, eventId){
+      function processDonation(amount, memo, btn, errId){
+        var amtNum = Number(amount);
+        var errEl = document.getElementById(errId);
+        if (!amtNum || amtNum <= 0){ if(errEl) errEl.textContent='Enter a valid amount.'; return; }
+        if (!confirm('Confirm donation of $'+amtNum.toFixed(2)+' for "'+memo+'"?\n\nThis will be charged from your balance.')) return;
+        if (errEl) errEl.textContent='';
+        var origHTML = btn ? btn.innerHTML : '';
+        if (btn){ btn.disabled=true; btn.textContent='Processing…'; }
+        function restore(){ if(btn){ btn.disabled=false; btn.innerHTML=origHTML; } }
+        google.script.run
+          .withSuccessHandler(function(res){
+            restore();
+            if (!res || !res.ok){ if(errEl) errEl.textContent=(res && res.error)||'Donation failed. Please try again.'; return; }
+            alert('Donation of $'+amtNum.toFixed(2)+' processed! Thank you.');
+            if (eventId) openEvent(eventId); else pageSponsor();
+          })
+          .withFailureHandler(function(e){
+            restore();
+            if(errEl) errEl.textContent=(e && e.message)||'Donation failed. Please try again.';
+          })
+          .api_donate(state.user.its, amtNum, memo);
+      }
+
+      var errId = idPrefix+'_err';
+      container.querySelectorAll('.sponsor-btn').forEach(function(btn){
+        btn.onclick = function(){ processDonation(btn.dataset.amount, btn.dataset.memo, btn, errId); };
+      });
+      var customBtn = document.getElementById(idPrefix+'_custom_btn');
+      var customInput = document.getElementById(idPrefix+'_custom');
+      if (customBtn) customBtn.onclick = function(){
+        processDonation(customInput ? customInput.value : '', 'Jaman Hub', customBtn, errId);
+      };
+    }
+
+    /* -----------------------------------------------------------------------
+     * _buildShirtCard(opts, saved)
+     *
+     * opts = {
+     *   idPrefix   : string   unique prefix for all IDs (e.g. 'sp1', 'sp1h', 'jr1')
+     *   cardTitle  : string   header text
+     *   isHoodie   : bool     hoodie card — only Type + Size, no athletic fields
+     *   isMandatory: bool     all fields required (used for Jersey tab)
+     *   onSave     : fn(payload, btn, errEl)  called with validated data
+     * }
+     * saved = previously-saved object (may be {})
+     * ---------------------------------------------------------------------- */
+    var ATHLETIC_COLORS = ['Gold','Blue','Red','Gray','Orange','Brown','Pink','Black','Purple','Fuchsia','Green','Maroon','Lime','Teal','White','Sky'];
+    var SHIRT_SIZES     = ['XS','S','M','L','XL','2XL','3XL'];
+
+    function _buildShirtCard(opts, saved){
+      saved = saved || {};
+      var p      = opts.idPrefix;
+      var isHood = !!opts.isHoodie;
+      var isMand = !!opts.isMandatory;
+
+      var colorOpts = ATHLETIC_COLORS.map(function(c){
+        return '<option value="'+c+'"'+(saved.color===c?' selected':'')+'>'+c+'</option>';
+      }).join('');
+      var sizeOpts = SHIRT_SIZES.map(function(s){
+        return '<option value="'+s+'"'+(saved.size===s?' selected':'')+'>'+s+'</option>';
+      }).join('');
+
+      var req = '<span style="color:var(--err)">*</span>';
+
+      var html = '<div class="label">'+_esc(opts.cardTitle)+'</div>';
+
+      if (!isHood){
+        /* Athletic fields (always shown — no fabric choice on jersey or hoodie card) */
+        html +=
+          '<div class="stack"><label class="label">Color '+req+'</label>'+
+            '<select id="'+p+'_color" class="input"><option value="">Select color…</option>'+colorOpts+'</select></div>'+
+          '<div class="stack"><label class="label">Name on Back'+(isMand?'':' (optional)')+'</label>'+
+            '<input id="'+p+'_name" class="input" placeholder="'+(isMand?'Required':'Optional')+'" value="'+_esc(saved.name_on_back||'')+'"></div>'+
+          '<div class="stack"><label class="label">Number on Back'+(isMand?'':' (optional)')+'</label>'+
+            '<input id="'+p+'_number" class="input" placeholder="'+(isMand?'Required':'Optional')+'" value="'+_esc(saved.number_on_back||'')+'"></div>'+
+          '<div class="stack"><label class="label">Sleeves '+req+'</label>'+
+            '<select id="'+p+'_sleeves" class="input">'+
+              '<option value="">Select…</option>'+
+              '<option value="Short"'+(saved.sleeves==='Short'?' selected':'')+'>Short</option>'+
+              '<option value="Long"'+(saved.sleeves==='Long'?' selected':'')+'>Long</option>'+
+            '</select></div>'+
+          '<div class="stack"><label class="label">Hood '+req+'</label>'+
+            '<select id="'+p+'_hood" class="input">'+
+              '<option value="">Select…</option>'+
+              '<option value="with Hood"'+(saved.hood==='with Hood'?' selected':'')+'>With Hood</option>'+
+              '<option value="without Hood"'+(saved.hood==='without Hood'?' selected':'')+'>Without Hood</option>'+
+            '</select></div>';
+      }
+
+      /* Shared: Type + Size */
+      html +=
+        '<div class="stack"><label class="label">Type '+req+'</label>'+
+          '<select id="'+p+'_type" class="input">'+
+            '<option value="">Select…</option>'+
+            '<option value="Unisex"'+(saved.type==='Unisex'?' selected':'')+'>Unisex</option>'+
+            '<option value="Youth"'+(saved.type==='Youth'?' selected':'')+'>Youth</option>'+
+          '</select></div>'+
+        '<div class="stack"><label class="label">Size '+req+'</label>'+
+          '<select id="'+p+'_size" class="input"><option value="">Select size…</option>'+sizeOpts+'</select></div>'+
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">'+
+          '<button class="btn" id="'+p+'_save_btn">Save</button>'+
+          '<div class="tiny" id="'+p+'_err" style="color:var(--err)"></div>'+
+        '</div>';
+
+      var card = document.createElement('div');
+      card.className = 'card stack';
+      card.id = 'card_'+p;
+      card.innerHTML = html;
+
+      /* Wire save button */
+      setTimeout(function(){
+        var btn = document.getElementById(p+'_save_btn');
+        if (btn) btn.onclick = function(){ _validateAndSaveShirt(p, isHood, isMand, opts.onSave, btn); };
+      }, 0);
+
+      return card;
+    }
+
+    function _validateAndSaveShirt(p, isHood, isMand, onSave, btn){
+      var errEl = document.getElementById(p+'_err');
+      function setErr(m){ if(errEl) errEl.textContent = m||''; }
+      setErr('');
+
+      var type = (document.getElementById(p+'_type')||{}).value || '';
+      var size = (document.getElementById(p+'_size')||{}).value || '';
+      if (!type){ setErr('Please choose a type.'); return; }
+      if (!size){ setErr('Please choose a size.'); return; }
+
+      var payload = { type: type, size: size };
+
+      if (!isHood){
+        var color   = (document.getElementById(p+'_color')||{}).value || '';
+        var sleeves = (document.getElementById(p+'_sleeves')||{}).value || '';
+        var hood    = (document.getElementById(p+'_hood')||{}).value || '';
+        var name    = (document.getElementById(p+'_name')||{}).value || '';
+        var number  = (document.getElementById(p+'_number')||{}).value || '';
+        if (!color)            { setErr('Please choose a color.'); return; }
+        if (isMand && !name)   { setErr('Name on back is required.'); return; }
+        if (isMand && !number) { setErr('Number on back is required.'); return; }
+        if (!sleeves)          { setErr('Please choose sleeves.'); return; }
+        if (!hood)             { setErr('Please choose hood.'); return; }
+        payload.color          = color;
+        payload.name_on_back   = name;
+        payload.number_on_back = number;
+        payload.sleeves        = sleeves;
+        payload.hood           = hood;
+        payload.fabric         = 'Athletic';
+      } else {
+        payload.fabric = 'Hoodie';
+      }
+
+      if (onSave) onSave(payload, btn, errEl);
+    }
+
+    /* Sponsor shirt save — calls api_saveSponsorShirt(its, context, num, payload)
+       context: 'sponsor' | 'jersey'  num: 1 or 2 */
+    function _makeSponsorShirtSaver(context, num){
+      return function(payload, btn, errEl){
+        function setErr(m){ if(errEl) errEl.textContent=m||''; }
+        withClickLock(context+':shirt:'+num+':'+state.user.its, btn, 'Saving…', function(done){
+          google.script.run
+            .withSuccessHandler(function(r){
+              done();
+              if(!r||!r.ok){ setErr((r&&r.error)||'Save failed.'); return; }
+              setErr('');
+              var orig = btn.innerHTML;
+              btn.innerHTML = '✓ Saved';
+              setTimeout(function(){ btn.innerHTML = orig; }, 1800);
+            })
+            .withFailureHandler(function(e){ done(); setErr((e&&e.message)||'Save failed.'); })
+            .api_saveSponsorShirt(state.user.its, context, num, payload);
+        });
+      };
+    }
+
+    /* Save business name, address, optional logo upload */
+    function _saveSponsorProfile(btn){
+      var errEl = document.getElementById('sp_save_err');
+      function setErr(m){ if(errEl) errEl.textContent = m||''; }
+      setErr('');
+
+      var bizName = (document.getElementById('sp_biz_name')||{}).value || '';
+      var address = (document.getElementById('sp_address')||{}).value || '';
+      var file    = (document.getElementById('sp_logo_file')||{}).files[0] || null;
+
+      withClickLock('sponsor:profile:'+state.user.its, btn, 'Saving…', function(done){
+        function finalize(logoUrl){
+          var payload = { business_name: bizName, address: address };
+          if (logoUrl) payload.business_logo_url = logoUrl;
+          google.script.run
+            .withSuccessHandler(function(r){
+              done();
+              if (!r || !r.ok){ setErr((r && r.error)||'Save failed.'); return; }
+              // Update local state
+              state.user = Object.assign({}, state.user, payload);
+              setErr('');
+              var origHTML = btn.innerHTML;
+              btn.innerHTML = '✓ Saved';
+              setTimeout(function(){ btn.innerHTML = origHTML; }, 1800);
+            })
+            .withFailureHandler(function(e){ done(); setErr((e && e.message)||'Save failed.'); })
+            .api_saveSponsorProfile(state.user.its, payload);
+        }
+
+        if (file){
+          var fr = new FileReader();
+          fr.onload = function(){
+            google.script.run
+              .withSuccessHandler(function(u){ finalize(u && u.url); })
+              .withFailureHandler(function(e){ done(); setErr((e && e.message)||'Logo upload failed.'); })
+              .api_uploadSponsorLogo(state.user.its, fr.result, file.name);
+          };
+          fr.onerror = function(){ done(); setErr('Could not read image.'); };
+          fr.readAsDataURL(file);
+        } else {
+          finalize(null);
+        }
+      });
+    }
+
     /* ===================== GUESTS ===================== */
     function pageGuests(){ if(!guard())return;
       var node=el(
@@ -1929,21 +2473,7 @@ async function openEvent(id){
 
         "<div class='card stack' id='sponsorship_card'>"+
           "<div class='label'>Sponsorship</div>"+
-          "<div class='event-actions' style='flex-wrap:wrap'>"+
-            "<button class='btn sponsor-btn' data-amount='453'  data-memo='Bronze Sponsorship'>$453<br/><span style='font-size:var(--fs-xs);opacity:.75'>Bronze</span></button>"+
-            "<button class='btn sponsor-btn' data-amount='786'  data-memo='Silver Sponsorship'>$786<br/><span style='font-size:var(--fs-xs);opacity:.75'>Silver</span></button>"+
-            "<button class='btn sponsor-btn' data-amount='1253' data-memo='Gold Sponsorship'>$1253<br/><span style='font-size:var(--fs-xs);opacity:.75'>Gold</span></button>"+
-          "</div>"+
-          "<div class='event-actions' style='flex-wrap:wrap'>"+
-            "<button class='btn secondary sponsor-btn' data-amount='21'  data-memo='Jaman Hub'>$21<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
-            "<button class='btn secondary sponsor-btn' data-amount='53'  data-memo='Jaman Hub'>$53<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
-            "<button class='btn secondary sponsor-btn' data-amount='110' data-memo='Jaman Hub'>$110<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
-          "</div>"+
-          "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'>"+
-            "<input id='sponsor_custom' class='input' type='number' min='1' placeholder='Custom amount ($)' style='max-width:180px'>"+
-            "<button class='btn secondary' id='sponsor_custom_btn'>Jaman Hub</button>"+
-          "</div>"+
-          "<div class='tiny' id='sponsor_err' style='color:var(--err)'></div>"+
+          _sponsorButtonsHTML('sponsor')+
         "</div>"+
 
         "<div class='card stack'>"+
@@ -1982,44 +2512,8 @@ ${evt.address || ''}`;
     const addBalBtn = document.getElementById('btn_add_balance');
     if (addBalBtn) addBalBtn.onclick = () => router.navigate('balance');
 
-    // Wire Sponsorship buttons
-    (function wireSponsorships(){
-      function processDonation(amount, memo, btn){
-        const amtNum = Number(amount);
-        if (!amtNum || amtNum <= 0) { document.getElementById('sponsor_err').textContent = 'Enter a valid amount.'; return; }
-        if (!confirm('Confirm donation of $' + amtNum.toFixed(2) + ' for "' + memo + '"?\n\nThis will be charged from your balance.')) return;
-        document.getElementById('sponsor_err').textContent = '';
-        const origHTML = btn ? btn.innerHTML : '';
-        if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
-        function restore(){ if (btn) { btn.disabled = false; btn.innerHTML = origHTML; } }
-        google.script.run
-          .withSuccessHandler(function(res){
-            restore();
-            if (!res || !res.ok){
-              document.getElementById('sponsor_err').textContent = (res && res.error) || 'Donation failed. Please try again.';
-              return;
-            }
-            alert('Donation of $' + amtNum.toFixed(2) + ' processed! Thank you.');
-          })
-          .withFailureHandler(function(e){
-            restore();
-            document.getElementById('sponsor_err').textContent = (e && e.message) || 'Donation failed. Please try again.';
-          })
-          .api_donate(state.user.its, amtNum, memo);
-      }
-
-      // Preset buttons
-      document.querySelectorAll('.sponsor-btn').forEach(function(btn){
-        btn.onclick = function(){ processDonation(btn.dataset.amount, btn.dataset.memo, btn); };
-      });
-
-      // Custom amount button
-      const customBtn = document.getElementById('sponsor_custom_btn');
-      if (customBtn) customBtn.onclick = function(){
-        const val = (document.getElementById('sponsor_custom').value || '').trim();
-        processDonation(val, 'Jaman Hub', customBtn);
-      };
-    })();
+    // Wire Sponsorship buttons (event context — refreshes event on success)
+    _wireSponsorButtons(document.getElementById('root'), 'sponsor', evt.id);
 
     // 4) Wire "Your Registration" buttons based on current status (pass clicked button)
     (function applySelfButtons(){
@@ -2975,6 +3469,8 @@ if (!isAdmin){
       if(state.page==='profile') return pageProfile();
       if(state.page==='balance') return pageBalance();
       if(state.page==='calendar') return pageCalendar();
+      if(state.page==='jersey')   return pageJersey();
+      if(state.page==='sponsor')  return pageSponsor();
       if(state.page==='guests') return pageGuests();
       if(state.page==='sport') return pageSport();
       if(state.page==='admin_events') return pageAdminEvents();
