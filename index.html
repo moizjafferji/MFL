@@ -601,6 +601,10 @@ window.addEventListener('hashchange', router.sync);
     var sportCountdownTimer = null;
     var homeTimers = { cd:null, uiRefresh:null };
 
+    /* ===================== SHIRT CONSTANTS ===================== */
+    var ATHLETIC_COLORS = ['Gold','Blue','Red','Gray','Orange','Brown','Pink','Black','Purple','Fuchsia','Green','Maroon','Lime','Teal','White','Sky'];
+    var SHIRT_SIZES     = ['XS','S','M','L','XL','2XL','3XL'];
+
     /* ===================== BOOT ===================== */
     // AFTER — route immediately if already signed in
 restoreSession();
@@ -1767,15 +1771,14 @@ function pageBalance(){
       purchaseData = purchaseData || {};
       var memo     = (purchaseData.memo || '').toLowerCase();
       var isCotton = memo.indexOf('cotton') !== -1 || memo.indexOf('hoodie') !== -1;
-      // Merge saved config with purchase defaults (sleeves/hood come from the price tier)
-      var saved    = Object.assign({}, purchaseData);
+      var saved    = Object.assign({ fabric: isCotton ? 'Cotton' : 'Athletic' }, purchaseData);
 
       return _buildShirtCard({
         idPrefix:        'jrp'+num,
         cardTitle:       'Shirt '+num+' — '+_esc(purchaseData.memo||''),
         isHoodie:        isCotton,
         hasFabricChoice: false,
-        lockSleevesHood: !isCotton,   // lock for athletic; cotton has no sleeves/hood
+        lockSleevesHood: !isCotton,
         isMandatory:     false,
         onSave: function(payload, btn, errEl){
           payload.purchase_idx = purchaseData.purchase_idx;
@@ -1817,8 +1820,6 @@ function pageBalance(){
     }
 
     function _renderSponsorPage(res){
-      var u = state.user || {};
-
       var level      = (res.level || '').toLowerCase();
       var isGold     = level === 'gold';
       var isSilver   = level === 'silver';
@@ -1830,8 +1831,7 @@ function pageBalance(){
       var levelColor  = levelColors[level] || 'var(--accent)';
       var levelLabel  = isGold ? 'Gold Sponsor' : isSilver ? 'Silver Sponsor' : isBronze ? 'Bronze Sponsor' : isJaman ? 'Jaman Hub' : '';
 
-      // Parse saved address fields
-      var addrParts = _parseAddress(res.address || '');
+      var addrParts  = _parseAddress(res.address || '');
 
       var root = document.createElement('div');
       root.className = 'stack';
@@ -1839,7 +1839,6 @@ function pageBalance(){
       /* ---- Header card ---- */
       var headerCard = document.createElement('div');
       headerCard.className = 'card stack';
-
       if (!hasSponsor){
         headerCard.innerHTML =
           '<div style="font-size:var(--fs-lg);font-weight:700;margin-bottom:4px">We\'d be honored if you Sponsor MFL 10</div>'+
@@ -1858,7 +1857,6 @@ function pageBalance(){
 
       if (!hasSponsor){
         _wireSponsorButtons(root, 'sp_page', null);
-        // Embedded sheet at bottom
         root.appendChild(_buildSponsorSheetEmbed());
         layout(root);
         return;
@@ -1868,11 +1866,10 @@ function pageBalance(){
       var infoCard = document.createElement('div');
       infoCard.className = 'card stack';
       infoCard.id = 'sp_info_card';
-
       infoCard.innerHTML =
         '<div class="label">Your Sponsor Profile</div>'+
-        // Logo thumbnail — always shown, hidden until loaded
-        '<div id="sp_logo_wrap" style="width:160px;border-radius:10px;overflow:hidden;background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.15);margin-bottom:6px;display:none">'+
+        // Logo thumbnail always present, hidden until loaded
+        '<div id="sp_logo_wrap" style="width:160px;border-radius:10px;overflow:hidden;background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.15);margin-bottom:8px;display:none">'+
           '<img id="sp_logo_img" alt="Business logo" style="width:100%;display:block;" />'+
         '</div>'+
         '<div class="form-grid">'+
@@ -1883,9 +1880,9 @@ function pageBalance(){
           '<div class="stack"><label class="label">City</label>'+
             '<input id="sp_addr_city" class="input" placeholder="City" value="'+_esc(addrParts.city||'')+'"></div>'+
           '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-            '<div class="stack" style="flex:1;min-width:100px"><label class="label">State</label>'+
+            '<div class="stack" style="flex:1;min-width:90px"><label class="label">State</label>'+
               '<select id="sp_addr_state" class="input">'+_usStateOptions(addrParts.state||'')+'</select></div>'+
-            '<div class="stack" style="flex:1;min-width:100px"><label class="label">ZIP</label>'+
+            '<div class="stack" style="flex:1;min-width:90px"><label class="label">ZIP</label>'+
               '<input id="sp_addr_zip" class="input" placeholder="75001" maxlength="10" value="'+_esc(addrParts.zip||'')+'"></div>'+
           '</div>'+
           '<div class="stack"><label class="label">Upload New Logo</label>'+
@@ -1897,10 +1894,9 @@ function pageBalance(){
           '<button class="btn" id="sp_save_btn">Save Profile</button>'+
           '<div class="tiny" id="sp_save_err" style="color:var(--err)"></div>'+
         '</div>';
-
       root.appendChild(infoCard);
 
-      /* ---- Hoodie card (one per sponsor, shown first) ---- */
+      /* ---- One hoodie card (all tiers, shown first) ---- */
       root.appendChild(_buildShirtCard({
         idPrefix:    'sph1',
         cardTitle:   'Sponsor Hoodie',
@@ -1909,20 +1905,22 @@ function pageBalance(){
         onSave:      _makeSponsorShirtSaver('sponsor_hoodie', 1)
       }, res.hoodie1 || {}));
 
-      /* ---- Shirt cards: Athletic/Cotton toggle ---- */
+      /* ---- Shirt cards with Athletic/Cotton choice ---- */
       var shirtCount = isGold || isSilver ? 2 : isBronze ? 1 : 0;
       for (var s = 1; s <= shirtCount; s++){
-        root.appendChild(_buildShirtCard({
-          idPrefix:    'sp'+s,
-          cardTitle:   'Sponsor Shirt '+s,
-          isHoodie:    false,
-          isMandatory: false,
-          hasFabricChoice: true,
-          onSave:      _makeSponsorShirtSaver('sponsor', s)
-        }, res['shirt'+s] || {}));
+        (function(num){
+          root.appendChild(_buildShirtCard({
+            idPrefix:        'sp'+num,
+            cardTitle:       'Sponsor Shirt '+num,
+            isHoodie:        false,
+            hasFabricChoice: true,
+            isMandatory:     false,
+            onSave:          _makeSponsorShirtSaver('sponsor', num)
+          }, res['shirt'+num] || {}));
+        })(s);
       }
 
-      // Embedded sheet at bottom
+      /* ---- Embedded sponsorship sheet ---- */
       root.appendChild(_buildSponsorSheetEmbed());
 
       layout(root);
@@ -1941,21 +1939,23 @@ function pageBalance(){
       if (saveBtn) saveBtn.onclick = function(){ _saveSponsorProfile(saveBtn); };
     }
 
-    /* Build the embedded Google Sheet card */
+    /* Embedded Google Sheet — auto-sizes to show all content */
     function _buildSponsorSheetEmbed(){
       var card = document.createElement('div');
       card.className = 'card stack';
       card.innerHTML =
         '<div class="label">Sponsorship Details</div>'+
-        '<iframe src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQDnx-pUJDk0ZIgt6nJB_rJHzy2f_wf-ao01aj_F7oZEXkMT7nEed4Hxdl2b4sZheKMde2BBf5glOcP/pubhtml?gid=15390228&single=true" '+
-          'style="width:100%;height:500px;border:0;border-radius:10px" '+
-          'loading="lazy"></iframe>';
+        '<iframe id="sp_sheet_frame" '+
+          'src="https://docs.google.com/spreadsheets/d/e/2PACX-1vQDnx-pUJDk0ZIgt6nJB_rJHzy2f_wf-ao01aj_F7oZEXkMT7nEed4Hxdl2b4sZheKMde2BBf5glOcP/pubhtml?gid=15390228&amp;single=true&amp;widget=false&amp;headers=false" '+
+          'style="width:100%;min-height:600px;border:0;border-radius:10px;display:block" '+
+          'scrolling="no" '+
+          'onload="(function(f){try{var h=f.contentDocument.body.scrollHeight;if(h>100)f.style.height=h+\'px\';}catch(_){f.style.height=\'800px\';}})(this)">'+
+        '</iframe>';
       return card;
     }
 
-    /* Parse a single-line address into parts */
+    /* Parse stored "Street, City, ST ZIP" into parts */
     function _parseAddress(addr){
-      // Expected stored format: "123 Main St, City, TX 75001"
       var parts = { street:'', city:'', state:'', zip:'' };
       if (!addr) return parts;
       var segs = addr.split(',').map(function(s){ return s.trim(); });
@@ -1969,7 +1969,7 @@ function pageBalance(){
       return parts;
     }
 
-    /* Generate US state <option> elements */
+    /* US state dropdown options */
     function _usStateOptions(selected){
       var states = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
         'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY',
@@ -1985,9 +1985,9 @@ function pageBalance(){
     /* Sponsorship buttons HTML — idPrefix keeps IDs unique per context */
     function _sponsorButtonsHTML(idPrefix){
       return "<div class='event-actions' style='flex-wrap:wrap'>"+
-          "<button class='btn sponsor-btn' data-amount='453'  data-memo='Bronze Sponsorship'>$453<br/><span style='font-size:var(--fs-xs);opacity:.75'>Bronze</span></button>"+
-          "<button class='btn sponsor-btn' data-amount='786'  data-memo='Silver Sponsorship'>$786<br/><span style='font-size:var(--fs-xs);opacity:.75'>Silver</span></button>"+
-          "<button class='btn sponsor-btn' data-amount='1253' data-memo='Gold Sponsorship'>$1253<br/><span style='font-size:var(--fs-xs);opacity:.75'>Gold</span></button>"+
+          "<button class='btn sponsor-btn' data-amount='453'  data-memo='Bronze Sponsorship' style='background:#cd7f32;border-color:#cd7f32;color:#fff'>$453<br/><span style='font-size:var(--fs-xs);opacity:.85'>Bronze</span></button>"+
+          "<button class='btn sponsor-btn' data-amount='786'  data-memo='Silver Sponsorship' style='background:#9fb3c8;border-color:#9fb3c8;color:#0b1220'>$786<br/><span style='font-size:var(--fs-xs);opacity:.85'>Silver</span></button>"+
+          "<button class='btn sponsor-btn' data-amount='1253' data-memo='Gold Sponsorship'   style='background:#f59e0b;border-color:#f59e0b;color:#0b1220'>$1253<br/><span style='font-size:var(--fs-xs);opacity:.85'>Gold</span></button>"+
         "</div>"+
         "<div class='event-actions' style='flex-wrap:wrap'>"+
           "<button class='btn secondary sponsor-btn' data-amount='21'  data-memo='Jaman Hub'>$21<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
@@ -2038,30 +2038,26 @@ function pageBalance(){
     }
 
     /* -----------------------------------------------------------------------
-    var ATHLETIC_COLORS = ['Gold','Blue','Red','Gray','Orange','Brown','Pink','Black','Purple','Fuchsia','Green','Maroon','Lime','Teal','White','Sky'];
-    var SHIRT_SIZES     = ['XS','S','M','L','XL','2XL','3XL'];
-
-    /*
      * _buildShirtCard(opts, saved)
      *
      * opts = {
      *   idPrefix       : string   unique prefix for all IDs
      *   cardTitle      : string   header text
-     *   isHoodie       : bool     hoodie — only Type + Size, no color/name/sleeves/hood
-     *   hasFabricChoice: bool     show Athletic/Cotton radio (sponsor shirts only)
-     *   lockSleevesHood: bool     show sleeves/hood as read-only text (purchased jerseys)
+     *   isHoodie       : bool     hoodie — only Type + Size
+     *   hasFabricChoice: bool     show Athletic/Cotton radio (sponsor shirts)
+     *   lockSleevesHood: bool     sleeves/hood pre-filled read-only (purchased jerseys)
      *   isMandatory    : bool     name/number required
      *   onSave         : fn(payload, btn, errEl)
      * }
-     */
+     * ---------------------------------------------------------------------- */
     function _buildShirtCard(opts, saved){
       saved = saved || {};
-      var p        = opts.idPrefix;
-      var isHood   = !!opts.isHoodie;
-      var isMand   = !!opts.isMandatory;
-      var hasFab   = !!opts.hasFabricChoice;
-      var lockSH   = !!opts.lockSleevesHood;
-      var req      = '<span style="color:var(--err)">*</span>';
+      var p      = opts.idPrefix;
+      var isHood = !!opts.isHoodie;
+      var isMand = !!opts.isMandatory;
+      var hasFab = !!opts.hasFabricChoice;
+      var lockSH = !!opts.lockSleevesHood;
+      var req    = '<span style="color:var(--err)">*</span>';
 
       var colorOpts = ATHLETIC_COLORS.map(function(c){
         return '<option value="'+c+'"'+(saved.color===c?' selected':'')+'>'+c+'</option>';
@@ -2073,42 +2069,40 @@ function pageBalance(){
       var html = '<div class="label">'+_esc(opts.cardTitle)+'</div>';
 
       if (!isHood){
-        // --- Fabric choice radio (sponsor shirts only) ---
+        // Fabric choice radio (sponsor shirts only)
         if (hasFab){
           var savedFabric = saved.fabric || 'Athletic';
           html +=
             '<div class="stack"><label class="label">Fabric '+req+'</label>'+
-              '<div style="display:flex;gap:16px;flex-wrap:wrap" id="'+p+'_fabric_wrap">'+
+              '<div style="display:flex;gap:16px;flex-wrap:wrap">'+
                 '<label style="display:flex;gap:6px;align-items:center;cursor:pointer">'+
-                  '<input type="radio" name="'+p+'_fabric" value="Athletic"'+(savedFabric!=='Cotton'?' checked':'')+' id="'+p+'_fabric_ath"> Athletic'+
+                  '<input type="radio" name="'+p+'_fabric" value="Athletic" id="'+p+'_fab_ath"'+(savedFabric!=='Cotton'?' checked':'')+'>Athletic'+
                 '</label>'+
                 '<label style="display:flex;gap:6px;align-items:center;cursor:pointer">'+
-                  '<input type="radio" name="'+p+'_fabric" value="Cotton"'+(savedFabric==='Cotton'?' checked':'')+' id="'+p+'_fabric_cot"> Cotton'+
+                  '<input type="radio" name="'+p+'_fabric" value="Cotton" id="'+p+'_fab_cot"'+(savedFabric==='Cotton'?' checked':'')+'>Cotton'+
                 '</label>'+
               '</div>'+
             '</div>';
         }
 
-        // --- Athletic-only fields wrapper (hidden when Cotton chosen) ---
-        var athHide = (hasFab && (saved.fabric === 'Cotton')) ? ' style="display:none"' : '';
+        // Athletic fields wrapper (hidden when Cotton selected)
+        var athHide = (hasFab && saved.fabric === 'Cotton') ? ' style="display:none"' : '';
         html += '<div id="'+p+'_ath_fields"'+athHide+'>';
-
         html +=
           '<div class="stack"><label class="label">Color '+req+'</label>'+
             '<select id="'+p+'_color" class="input"><option value="">Select color…</option>'+colorOpts+'</select></div>'+
           '<div class="stack"><label class="label">Name on Back'+(isMand?' '+req:' (optional)')+'</label>'+
-            '<input id="'+p+'_name" class="input" placeholder="'+(isMand?'Required':'Optional')+'" value="'+_esc(saved.name_on_back||'')+'"></div>'+
+            '<input id="'+p+'_name" class="input" maxlength="30" placeholder="'+(isMand?'Required':'Optional')+'" value="'+_esc(saved.name_on_back||'')+'"></div>'+
           '<div class="stack"><label class="label">Number on Back'+(isMand?' '+req:' (optional)')+'</label>'+
             '<input id="'+p+'_number" class="input" type="text" inputmode="numeric" maxlength="2" placeholder="'+(isMand?'Required':'Optional')+'" value="'+_esc(saved.number_on_back||'')+'"></div>';
 
         if (lockSH){
-          // Sleeves and hood pre-filled from purchase, shown as read-only text
           html +=
             '<div class="stack"><label class="label">Sleeves</label>'+
-              '<div class="input" style="opacity:.7;cursor:default" id="'+p+'_sleeves_disp">'+_esc(saved.sleeves||'—')+'</div>'+
+              '<div class="input" style="opacity:.65;cursor:default">'+_esc(saved.sleeves||'—')+'</div>'+
               '<input type="hidden" id="'+p+'_sleeves" value="'+_esc(saved.sleeves||'')+'"></div>'+
-            '<div class="stack"><label class="label">Hood</label>'+
-              '<div class="input" style="opacity:.7;cursor:default" id="'+p+'_hood_disp">'+_esc(saved.hood||'—')+'</div>'+
+            '<div class="stack"><label class="label">Hood/Collar</label>'+
+              '<div class="input" style="opacity:.65;cursor:default">'+_esc(saved.hood||'—')+'</div>'+
               '<input type="hidden" id="'+p+'_hood" value="'+_esc(saved.hood||'')+'"></div>';
         } else {
           html +=
@@ -2126,7 +2120,6 @@ function pageBalance(){
                 '<option value="without Hood/Collar"'+(saved.hood==='without Hood/Collar'?' selected':'')+'>Without Hood/Collar</option>'+
               '</select></div>';
         }
-
         html += '</div>'; // close ath_fields
       }
 
@@ -2150,18 +2143,16 @@ function pageBalance(){
       card.id = 'card_'+p;
       card.innerHTML = html;
 
-      /* Wire fabric toggle if applicable */
+      /* Wire fabric toggle */
       setTimeout(function(){
         if (hasFab){
           var athFields = document.getElementById(p+'_ath_fields');
-          var radios = card.querySelectorAll('input[name="'+p+'_fabric"]');
-          radios.forEach(function(r){
+          card.querySelectorAll('input[name="'+p+'_fabric"]').forEach(function(r){
             r.addEventListener('change', function(){
               if (athFields) athFields.style.display = (r.value === 'Athletic') ? '' : 'none';
             });
           });
         }
-        /* Wire save button */
         var btn = document.getElementById(p+'_save_btn');
         if (btn) btn.onclick = function(){ _validateAndSaveShirt(p, isHood, isMand, hasFab, lockSH, opts.onSave, btn); };
       }, 0);
@@ -2182,7 +2173,6 @@ function pageBalance(){
       var payload = { type: type, size: size };
 
       if (!isHood){
-        // Fabric
         var fabric = 'Athletic';
         if (hasFab){
           var fabRadio = document.querySelector('input[name="'+p+'_fabric"]:checked');
@@ -2197,13 +2187,11 @@ function pageBalance(){
           var number  = (document.getElementById(p+'_number')||{}).value || '';
           var sleeves = (document.getElementById(p+'_sleeves')||{}).value || '';
           var hood    = (document.getElementById(p+'_hood')||{}).value || '';
-
           if (!color)             { setErr('Please choose a color.'); return; }
           if (isMand && !name)    { setErr('Name on back is required.'); return; }
           if (isMand && !number)  { setErr('Number on back is required.'); return; }
           if (!lockSH && !sleeves){ setErr('Please choose sleeves.'); return; }
           if (!lockSH && !hood)   { setErr('Please choose hood/collar.'); return; }
-
           payload.color          = color;
           payload.name_on_back   = name;
           payload.number_on_back = number;
@@ -2245,12 +2233,11 @@ function pageBalance(){
       setErr('');
 
       var bizName = (document.getElementById('sp_biz_name')||{}).value || '';
-      var street  = (document.getElementById('sp_addr_street')||{}).value || '';
-      var city    = (document.getElementById('sp_addr_city')||{}).value || '';
-      var state_  = (document.getElementById('sp_addr_state')||{}).value || '';
-      var zip     = (document.getElementById('sp_addr_zip')||{}).value || '';
-      // Assemble single-line address for storage
-      var address = [street, city, (state_ + (zip ? ' '+zip : ''))].filter(function(s){ return s.trim(); }).join(', ');
+      var street  = ((document.getElementById('sp_addr_street')||{}).value || '').trim();
+      var city    = ((document.getElementById('sp_addr_city')||{}).value || '').trim();
+      var stateV  = ((document.getElementById('sp_addr_state')||{}).value || '').trim();
+      var zip     = ((document.getElementById('sp_addr_zip')||{}).value || '').trim();
+      var address = [street, city, (stateV + (zip ? ' '+zip : ''))].filter(function(s){ return s; }).join(', ');
       var file    = (document.getElementById('sp_logo_file')||{}).files[0] || null;
 
       withClickLock('sponsor:profile:'+state.user.its, btn, 'Saving…', function(done){
@@ -2263,7 +2250,6 @@ function pageBalance(){
               if (!r || !r.ok){ setErr((r && r.error)||'Save failed.'); return; }
               state.user = Object.assign({}, state.user, payload);
               setErr('');
-              // Update thumbnail if new logo was uploaded
               if (logoUrl){
                 var img  = document.getElementById('sp_logo_img');
                 var wrap = document.getElementById('sp_logo_wrap');
@@ -2276,7 +2262,6 @@ function pageBalance(){
             .withFailureHandler(function(e){ done(); setErr((e && e.message)||'Save failed.'); })
             .api_saveSponsorProfile(state.user.its, payload);
         }
-
         if (file){
           var fr = new FileReader();
           fr.onload = function(){
