@@ -1989,17 +1989,21 @@ ${evt.address || ''}`;
         if (!amtNum || amtNum <= 0) { document.getElementById('sponsor_err').textContent = 'Enter a valid amount.'; return; }
         if (!confirm('Confirm donation of $' + amtNum.toFixed(2) + ' for "' + memo + '"?\n\nThis will be charged from your balance.')) return;
         document.getElementById('sponsor_err').textContent = '';
-        const origText = btn ? btn.innerHTML : '';
+        const origHTML = btn ? btn.innerHTML : '';
         if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
+        function restore(){ if (btn) { btn.disabled = false; btn.innerHTML = origHTML; } }
         google.script.run
           .withSuccessHandler(function(res){
-            if (btn) { btn.disabled = false; btn.innerHTML = origText; }
-            if (!res || !res.ok){ document.getElementById('sponsor_err').textContent = (res && res.error) || 'Donation failed.'; return; }
+            restore();
+            if (!res || !res.ok){
+              document.getElementById('sponsor_err').textContent = (res && res.error) || 'Donation failed. Please try again.';
+              return;
+            }
             alert('Donation of $' + amtNum.toFixed(2) + ' processed! Thank you.');
           })
           .withFailureHandler(function(e){
-            if (btn) { btn.disabled = false; btn.innerHTML = origText; }
-            document.getElementById('sponsor_err').textContent = (e && e.message) || 'Donation failed.';
+            restore();
+            document.getElementById('sponsor_err').textContent = (e && e.message) || 'Donation failed. Please try again.';
           })
           .api_donate(state.user.its, amtNum, memo);
       }
