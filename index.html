@@ -325,7 +325,8 @@
   if (window.google && google.script && google.script.run) return;
 
   const CACHEABLE_READS = new Set([
-    'api_listEvents', 'api_upcomingEvents', 'api_eventDetails'
+    'api_listEvents', 'api_upcomingEvents'
+    // api_eventDetails intentionally excluded — roster must always be live (no cache)
   ]);
 
   function runner(base, ctx = { ok: null, fail: null }) {
