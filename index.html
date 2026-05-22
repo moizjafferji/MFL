@@ -1849,74 +1849,85 @@ function pageBalance(){
                        '<div class="muted" id="sp_goals_body">Loading…</div>';
       root.appendChild(card);
 
-      google.script.run
-        .withSuccessHandler(function(res){
-          var body = document.getElementById('sp_goals_body');
-          if (!body) { callback(); return; }
+      function setBody(html){
+        var body = document.getElementById('sp_goals_body');
+        if (body) body.innerHTML = html;
+      }
 
-          if (!res || !res.ok){
-            body.innerHTML = '<span style="color:var(--err)">Could not load goals.</span>';
-            callback();
-            return;
-          }
-          if (res._tabNotFound){
-            body.innerHTML = '<span class="muted">Goals tab not found in spreadsheet (looking for tab named &ldquo;'+(res._tabName||'Goal')+'&rdquo;).</span>';
-            callback();
-            return;
-          }
-          if (!res.rows || res.rows.length === 0){
-            body.innerHTML = '<span class="muted">No goals posted yet.</span>';
-            callback();
-            return;
-          }
+      // Use fetch directly against /gas so we get real HTTP error info
+      // and a hard 15s timeout — never hangs forever
+      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var timer = setTimeout(function(){
+        if (controller) controller.abort();
+        setBody('<span style="color:var(--err)">Goals timed out. Check GAS logs for api_getGoals.</span>');
+        callback();
+      }, 15000);
 
-          var headers = res.headers || [];
-          var rows    = res.rows;
+      fetch('/gas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'api_getGoals', args: [] }),
+        signal: controller ? controller.signal : undefined
+      })
+      .then(function(r){
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(res){
+        clearTimeout(timer);
+        if (!res || !res.ok){
+          setBody('<span style="color:var(--err)">Could not load goals'+(res&&res.error?': '+res.error:'')+'.</span>');
+          callback(); return;
+        }
+        if (res._tabNotFound){
+          setBody('<span class="muted">Goals tab not found — looking for a sheet tab named &ldquo;'+(res._tabName||'Goal')+'&rdquo;.</span>');
+          callback(); return;
+        }
+        if (!res.rows || res.rows.length === 0){
+          setBody('<span class="muted">No goals posted yet.</span>');
+          callback(); return;
+        }
 
-          // Build a clean table if there are headers, otherwise a label:value list
-          var html = '';
-          if (headers.length > 0){
-            html += '<div style="overflow-x:auto"><table class="table table--compact" style="width:100%;margin-top:4px">'+
-              '<thead><tr>'+
-              headers.map(function(h){ return '<th>'+_esc(String(h))+'</th>'; }).join('')+
-              '</tr></thead><tbody>';
-            rows.forEach(function(row){
-              html += '<tr>'+
-                headers.map(function(h){
-                  var v = row[h];
-                  // Format numbers and dates nicely
-                  if (v instanceof Date) v = v.toLocaleDateString();
-                  else if (typeof v === 'number') v = v.toLocaleString();
-                  return '<td>'+_esc(String(v === null || v === undefined ? '' : v))+'</td>';
-                }).join('')+
-              '</tr>';
+        var headers = res.headers || [];
+        var rows    = res.rows;
+        var html    = '';
+
+        if (headers.length > 0){
+          html += '<div style="overflow-x:auto"><table class="table table--compact" style="width:100%;margin-top:4px">'+
+            '<thead><tr>'+headers.map(function(h){ return '<th>'+_esc(String(h))+'</th>'; }).join('')+'</tr></thead><tbody>';
+          rows.forEach(function(row){
+            html += '<tr>'+headers.map(function(h){
+              var v = row[h];
+              if (v instanceof Date) v = v.toLocaleDateString();
+              else if (typeof v === 'number') v = v.toLocaleString();
+              return '<td>'+_esc(String(v==null?'':v))+'</td>';
+            }).join('')+'</tr>';
+          });
+          html += '</tbody></table></div>';
+        } else {
+          rows.forEach(function(row, ri){
+            if (ri > 0) html += '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0">';
+            Object.keys(row).forEach(function(k){
+              if (!k) return;
+              var v = row[k];
+              if (v instanceof Date) v = v.toLocaleDateString();
+              else if (typeof v === 'number') v = v.toLocaleString();
+              html += '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+                '<span class="label" style="min-width:120px">'+_esc(k)+'</span>'+
+                '<span>'+_esc(String(v==null?'':v))+'</span></div>';
             });
-            html += '</tbody></table></div>';
-          } else {
-            // Fallback: key-value pairs
-            rows.forEach(function(row, ri){
-              if (ri > 0) html += '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0">';
-              Object.keys(row).forEach(function(k){
-                if (!k) return;
-                var v = row[k];
-                if (v instanceof Date) v = v.toLocaleDateString();
-                else if (typeof v === 'number') v = v.toLocaleString();
-                html += '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-                  '<span class="label" style="min-width:120px">'+_esc(k)+'</span>'+
-                  '<span>'+_esc(String(v === null || v === undefined ? '' : v))+'</span></div>';
-              });
-            });
-          }
+          });
+        }
 
-          body.innerHTML = html;
-          callback();
-        })
-        .withFailureHandler(function(e){
-          var body = document.getElementById('sp_goals_body');
-          if (body) body.innerHTML = '<span style="color:var(--err)">Could not load goals.</span>';
-          callback();
-        })
-        .api_getGoals();
+        setBody(html);
+        callback();
+      })
+      .catch(function(e){
+        clearTimeout(timer);
+        if (e && e.name === 'AbortError') return; // timeout handler already fired
+        setBody('<span style="color:var(--err)">Goals failed: '+(e&&e.message?e.message:'network error')+'</span>');
+        callback();
+      });
     }
 
     function _renderSponsorPage(res){
