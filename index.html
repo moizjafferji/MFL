@@ -1577,7 +1577,7 @@ function pageBalance(){
         '<button id="copyMemoBtn" class="btn btn--sm" style="margin-left:6px;padding:4px 8px;border-radius:8px;cursor:pointer;">Copy memo</button>'+
         '<br/><div class="tiny muted" style="margin-top:6px">Please allow up to 10 minutes for balance to update.</div>'+
         '<br/>'+
-        '<a id="balRegisterBtn" href="https://mflt.meemjeem.com/#/event/EV-1779377563569" target="_blank" rel="noopener" class="btn" style="display:inline-flex;text-decoration:none;">Register</a>'+
+        '<button id="balRegisterBtn" class="btn">Register</button>'+
       '</div>'+
       '<table class="table table--compact" style="margin-top:10px">'+
         '<thead><tr><th>Date</th><th>Event</th><th>Status</th><th class="right">Amount</th></tr></thead>'+
@@ -1590,6 +1590,7 @@ function pageBalance(){
 
   var balBox = $('#bal_box');
   balBox.querySelector('#copyEmailBtn').addEventListener('click', function(){ copyText(email, this); });
+  balBox.querySelector('#balRegisterBtn').addEventListener('click', function(){ setPage('events'); });
   balBox.querySelector('#copyMemoBtn').addEventListener('click',  function(){ copyText(memoText, this); });
   balBox.querySelector('#downloadCsvBtn').addEventListener('click', function(){
     var btn = this, orig = btn.textContent;
@@ -1835,6 +1836,79 @@ function pageBalance(){
         .api_getSponsorInfo(u.its);
     }
 
+    /* -----------------------------------------------------------------------
+     * _appendGoalsCard(root, callback)
+     * Fetches Goal sheet data, builds a card, appends to root, then calls callback.
+     * Always calls callback even on failure (shows error state in card).
+     * ---------------------------------------------------------------------- */
+    function _appendGoalsCard(root, callback){
+      var card = document.createElement('div');
+      card.className = 'card stack';
+      card.id = 'sp_goals_card';
+      card.innerHTML = '<div class="label" style="font-size:var(--fs-lg);font-weight:700;margin-bottom:4px">MFL Goals</div>'+
+                       '<div class="muted" id="sp_goals_body">Loading…</div>';
+      root.appendChild(card);
+
+      google.script.run
+        .withSuccessHandler(function(res){
+          var body = document.getElementById('sp_goals_body');
+          if (!body) { callback(); return; }
+
+          if (!res || !res.ok || !res.rows || res.rows.length === 0){
+            body.innerHTML = '<span class="muted">No goals posted yet.</span>';
+            callback();
+            return;
+          }
+
+          var headers = res.headers || [];
+          var rows    = res.rows;
+
+          // Build a clean table if there are headers, otherwise a label:value list
+          var html = '';
+          if (headers.length > 0){
+            html += '<div style="overflow-x:auto"><table class="table table--compact" style="width:100%;margin-top:4px">'+
+              '<thead><tr>'+
+              headers.map(function(h){ return '<th>'+_esc(String(h))+'</th>'; }).join('')+
+              '</tr></thead><tbody>';
+            rows.forEach(function(row){
+              html += '<tr>'+
+                headers.map(function(h){
+                  var v = row[h];
+                  // Format numbers and dates nicely
+                  if (v instanceof Date) v = v.toLocaleDateString();
+                  else if (typeof v === 'number') v = v.toLocaleString();
+                  return '<td>'+_esc(String(v === null || v === undefined ? '' : v))+'</td>';
+                }).join('')+
+              '</tr>';
+            });
+            html += '</tbody></table></div>';
+          } else {
+            // Fallback: key-value pairs
+            rows.forEach(function(row, ri){
+              if (ri > 0) html += '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0">';
+              Object.keys(row).forEach(function(k){
+                if (!k) return;
+                var v = row[k];
+                if (v instanceof Date) v = v.toLocaleDateString();
+                else if (typeof v === 'number') v = v.toLocaleString();
+                html += '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+                  '<span class="label" style="min-width:120px">'+_esc(k)+'</span>'+
+                  '<span>'+_esc(String(v === null || v === undefined ? '' : v))+'</span></div>';
+              });
+            });
+          }
+
+          body.innerHTML = html;
+          callback();
+        })
+        .withFailureHandler(function(e){
+          var body = document.getElementById('sp_goals_body');
+          if (body) body.innerHTML = '<span style="color:var(--err)">Could not load goals.</span>';
+          callback();
+        })
+        .api_getGoals();
+    }
+
     function _renderSponsorPage(res){
       var u = state.user || {};
 
@@ -1878,7 +1952,7 @@ function pageBalance(){
       /* ---- If not yet sponsored, show card and stop ---- */
       if (!hasSponsor){
         _wireSponsorButtons(root, 'sp_page', null);
-        layout(root);
+        _appendGoalsCard(root, function(){ layout(root); });
         return;
       }
 
@@ -1903,7 +1977,9 @@ function pageBalance(){
           '<div class="stack"><label class="label">City <span style=\"color:var(--err)\">*</span></label>'+
             '<input id="sp_addr_city" class="input" placeholder="City" value="'+_esc(addrParts.city)+'"></div>'+
           '<div class="stack"><label class="label">State <span style=\"color:var(--err)\">*</span></label>'+
-            '<input id="sp_addr_state" class="input" placeholder="TX" maxlength="2" style=\"max-width:80px;text-transform:uppercase\" value="'+_esc(addrParts.state)+'"></div>'+
+            '<select id="sp_addr_state" class="input"><option value="">Select state…</option>'+
+          (function(sv){ return ['<option value="AL"'+(sv==="AL"?' selected':'')+'>AL — Alabama</option>','<option value="AK"'+(sv==="AK"?' selected':'')+'>AK — Alaska</option>','<option value="AZ"'+(sv==="AZ"?' selected':'')+'>AZ — Arizona</option>','<option value="AR"'+(sv==="AR"?' selected':'')+'>AR — Arkansas</option>','<option value="CA"'+(sv==="CA"?' selected':'')+'>CA — California</option>','<option value="CO"'+(sv==="CO"?' selected':'')+'>CO — Colorado</option>','<option value="CT"'+(sv==="CT"?' selected':'')+'>CT — Connecticut</option>','<option value="DE"'+(sv==="DE"?' selected':'')+'>DE — Delaware</option>','<option value="FL"'+(sv==="FL"?' selected':'')+'>FL — Florida</option>','<option value="GA"'+(sv==="GA"?' selected':'')+'>GA — Georgia</option>','<option value="HI"'+(sv==="HI"?' selected':'')+'>HI — Hawaii</option>','<option value="ID"'+(sv==="ID"?' selected':'')+'>ID — Idaho</option>','<option value="IL"'+(sv==="IL"?' selected':'')+'>IL — Illinois</option>','<option value="IN"'+(sv==="IN"?' selected':'')+'>IN — Indiana</option>','<option value="IA"'+(sv==="IA"?' selected':'')+'>IA — Iowa</option>','<option value="KS"'+(sv==="KS"?' selected':'')+'>KS — Kansas</option>','<option value="KY"'+(sv==="KY"?' selected':'')+'>KY — Kentucky</option>','<option value="LA"'+(sv==="LA"?' selected':'')+'>LA — Louisiana</option>','<option value="ME"'+(sv==="ME"?' selected':'')+'>ME — Maine</option>','<option value="MD"'+(sv==="MD"?' selected':'')+'>MD — Maryland</option>','<option value="MA"'+(sv==="MA"?' selected':'')+'>MA — Massachusetts</option>','<option value="MI"'+(sv==="MI"?' selected':'')+'>MI — Michigan</option>','<option value="MN"'+(sv==="MN"?' selected':'')+'>MN — Minnesota</option>','<option value="MS"'+(sv==="MS"?' selected':'')+'>MS — Mississippi</option>','<option value="MO"'+(sv==="MO"?' selected':'')+'>MO — Missouri</option>','<option value="MT"'+(sv==="MT"?' selected':'')+'>MT — Montana</option>','<option value="NE"'+(sv==="NE"?' selected':'')+'>NE — Nebraska</option>','<option value="NV"'+(sv==="NV"?' selected':'')+'>NV — Nevada</option>','<option value="NH"'+(sv==="NH"?' selected':'')+'>NH — New Hampshire</option>','<option value="NJ"'+(sv==="NJ"?' selected':'')+'>NJ — New Jersey</option>','<option value="NM"'+(sv==="NM"?' selected':'')+'>NM — New Mexico</option>','<option value="NY"'+(sv==="NY"?' selected':'')+'>NY — New York</option>','<option value="NC"'+(sv==="NC"?' selected':'')+'>NC — North Carolina</option>','<option value="ND"'+(sv==="ND"?' selected':'')+'>ND — North Dakota</option>','<option value="OH"'+(sv==="OH"?' selected':'')+'>OH — Ohio</option>','<option value="OK"'+(sv==="OK"?' selected':'')+'>OK — Oklahoma</option>','<option value="OR"'+(sv==="OR"?' selected':'')+'>OR — Oregon</option>','<option value="PA"'+(sv==="PA"?' selected':'')+'>PA — Pennsylvania</option>','<option value="RI"'+(sv==="RI"?' selected':'')+'>RI — Rhode Island</option>','<option value="SC"'+(sv==="SC"?' selected':'')+'>SC — South Carolina</option>','<option value="SD"'+(sv==="SD"?' selected':'')+'>SD — South Dakota</option>','<option value="TN"'+(sv==="TN"?' selected':'')+'>TN — Tennessee</option>','<option value="TX"'+(sv==="TX"?' selected':'')+'>TX — Texas</option>','<option value="UT"'+(sv==="UT"?' selected':'')+'>UT — Utah</option>','<option value="VT"'+(sv==="VT"?' selected':'')+'>VT — Vermont</option>','<option value="VA"'+(sv==="VA"?' selected':'')+'>VA — Virginia</option>','<option value="WA"'+(sv==="WA"?' selected':'')+'>WA — Washington</option>','<option value="WV"'+(sv==="WV"?' selected':'')+'>WV — West Virginia</option>','<option value="WI"'+(sv==="WI"?' selected':'')+'>WI — Wisconsin</option>','<option value="WY"'+(sv==="WY"?' selected':'')+'>WY — Wyoming</option>','<option value="DC"'+(sv==="DC"?' selected':'')+'>DC — District of Columbia</option>'].join(''); })(addrParts.state)+
+          '</select></div>'+
           '<div class="stack"><label class="label">ZIP Code <span style=\"color:var(--err)\">*</span></label>'+
             '<input id="sp_addr_zip" class="input" placeholder="75001" maxlength="10" value="'+_esc(addrParts.zip)+'"></div>'+
           '<div class="stack"><label class="label">Upload New Logo</label>'+
@@ -1935,20 +2011,22 @@ function pageBalance(){
         root.appendChild(_buildSponsorShirtChooser(s, res['shirt'+s] || {}));
       }
 
-      layout(root);
+      _appendGoalsCard(root, function(){
+        layout(root);
 
-      /* Wire logo preview — always show if URL exists */
-      var logoImg = document.getElementById('sp_logo_img');
-      var logoWrap = document.getElementById('sp_logo_wrap');
-      if (logoImg && logoWrap && res.business_logo_url){
-        logoImg.src = res.business_logo_url;
-        logoImg.onload  = function(){ logoWrap.style.display = 'block'; };
-        logoImg.onerror = function(){ logoWrap.style.display = 'none'; };
-      }
+        /* Wire logo preview — always show if URL exists */
+        var logoImg = document.getElementById('sp_logo_img');
+        var logoWrap = document.getElementById('sp_logo_wrap');
+        if (logoImg && logoWrap && res.business_logo_url){
+          logoImg.src = res.business_logo_url;
+          logoImg.onload  = function(){ logoWrap.style.display = 'block'; };
+          logoImg.onerror = function(){ logoWrap.style.display = 'none'; };
+        }
 
-      /* Wire Save Profile button */
-      var saveBtn = document.getElementById('sp_save_btn');
-      if (saveBtn) saveBtn.onclick = function(){ _saveSponsorProfile(saveBtn); };
+        /* Wire Save Profile button */
+        var saveBtn = document.getElementById('sp_save_btn');
+        if (saveBtn) saveBtn.onclick = function(){ _saveSponsorProfile(saveBtn); };
+      });
     }
 
     /* Shared escape helper */
@@ -2292,22 +2370,23 @@ function pageBalance(){
       function setErr(m){ if(errEl) errEl.textContent = m||''; }
       setErr('');
 
-      var bizName = (document.getElementById('sp_biz_name')||{}).value || '';
-      var street  = ((document.getElementById('sp_addr_street')||{}).value || '').trim();
-      var city    = ((document.getElementById('sp_addr_city')||{}).value || '').trim();
-      var state   = ((document.getElementById('sp_addr_state')||{}).value || '').trim().toUpperCase();
-      var zip     = ((document.getElementById('sp_addr_zip')||{}).value || '').trim();
-      var file    = (document.getElementById('sp_logo_file')||{}).files[0] || null;
+      var bizName  = (document.getElementById('sp_biz_name')||{}).value || '';
+      var street   = ((document.getElementById('sp_addr_street')||{}).value || '').trim();
+      var city     = ((document.getElementById('sp_addr_city')||{}).value || '').trim();
+      var addrState = ((document.getElementById('sp_addr_state')||{}).value || '').trim();
+      var zip      = ((document.getElementById('sp_addr_zip')||{}).value || '').trim();
+      var file     = (document.getElementById('sp_logo_file')||{}).files[0] || null;
 
       // Validate all address fields
-      if (!street){ setErr('Street address is required.'); return; }
-      if (!city)  { setErr('City is required.'); return; }
-      if (!state) { setErr('State is required.'); return; }
-      if (!zip)   { setErr('ZIP code is required.'); return; }
+      if (!street)    { setErr('Street address is required.'); return; }
+      if (!city)      { setErr('City is required.'); return; }
+      if (!addrState) { setErr('State is required.'); return; }
+      if (!zip)       { setErr('ZIP code is required.'); return; }
 
-      var address = street + ', ' + city + ', ' + state + ' ' + zip;
+      var address = street + ', ' + city + ', ' + addrState + ' ' + zip;
+      var its     = state.user.its; // capture before any local var could shadow
 
-      withClickLock('sponsor:profile:'+state.user.its, btn, 'Saving…', function(done){
+      withClickLock('sponsor:profile:'+its, btn, 'Saving…', function(done){
         function finalize(logoUrl){
           var payload = { business_name: bizName, address: address };
           if (logoUrl) payload.business_logo_url = logoUrl;
@@ -2333,7 +2412,7 @@ function pageBalance(){
               setTimeout(function(){ btn.innerHTML = origHTML; }, 1800);
             })
             .withFailureHandler(function(e){ done(); setErr((e && e.message)||'Save failed.'); })
-            .api_saveSponsorProfile(state.user.its, payload);
+            .api_saveSponsorProfile(its, payload);
         }
 
         if (file){
@@ -2345,7 +2424,7 @@ function pageBalance(){
                 finalize(u.url);
               })
               .withFailureHandler(function(e){ done(); setErr((e && e.message)||'Logo upload failed.'); })
-              .api_uploadSponsorLogo(state.user.its, fr.result, file.name);
+              .api_uploadSponsorLogo(its, fr.result, file.name);
           };
           fr.onerror = function(){ done(); setErr('Could not read image.'); };
           fr.readAsDataURL(file);
