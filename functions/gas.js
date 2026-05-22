@@ -39,7 +39,7 @@ export async function onRequest({ request, env }) {
     // Public — same for all users
     'api_listEvents':      300,  // 5 min
     'api_upcomingEvents':  300,  // 5 min
-    'api_eventDetails':    300,  // 5 min
+    // api_eventDetails intentionally excluded — roster must always be live (no cache)
 
     // Semi-public boot data (sports list, settings, logo) — changes rarely
     'api_bootstrap':       300,  // 5 min
