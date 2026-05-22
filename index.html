@@ -325,8 +325,7 @@
   if (window.google && google.script && google.script.run) return;
 
   const CACHEABLE_READS = new Set([
-    'api_listEvents', 'api_upcomingEvents'
-    // api_eventDetails intentionally excluded — roster must always be live (no cache)
+    'api_listEvents', 'api_upcomingEvents', 'api_eventDetails'
   ]);
 
   function runner(base, ctx = { ok: null, fail: null }) {
@@ -1576,7 +1575,7 @@ function pageBalance(){
         'MUST WRITE THIS EXACTLY IN MEMO:<br/>'+
         '<span style="font-weight:600">'+memoText+'</span> '+
         '<button id="copyMemoBtn" class="btn btn--sm" style="margin-left:6px;padding:4px 8px;border-radius:8px;cursor:pointer;">Copy memo</button>'+
-        '<br/><div class="tiny muted" style="margin-top:6px">Please allow up to 15 minutes for balance to update.</div>'+
+        '<br/><div class="tiny muted" style="margin-top:6px">Please allow up to 10 minutes for balance to update.</div>'+
         '<br/>'+
         '<a id="balRegisterBtn" href="https://mflt.meemjeem.com/#/event/EV-1779377563569" target="_blank" rel="noopener" class="btn" style="display:inline-flex;text-decoration:none;">Register</a>'+
       '</div>'+
@@ -1775,9 +1774,9 @@ function pageBalance(){
       if (isSpecial){
         /* Cotton / Hoodie: only Type + Size */
         card = _buildShirtCard({
-          idPrefix:   'jrp'+num,
-          cardTitle:  'Shirt '+num+' Details — '+_esc(purchaseData.memo||''),
-          isHoodie:   true,
+          idPrefix:    'jrp'+num,
+          cardTitle:   'Shirt '+num+' Details — '+_esc(purchaseData.memo||''),
+          isHoodie:    true,
           isMandatory: false,
           onSave: function(payload, btn, errEl){
             payload.purchase_idx = purchaseData.purchase_idx;
@@ -1785,13 +1784,15 @@ function pageBalance(){
           }
         }, purchaseData);
       } else {
-        /* Athletic — prefill sleeves/hood from the chosen price tier */
+        /* Athletic — sleeves and hood are autofilled from the purchase tier (read-only) */
         var prefilled = Object.assign({}, purchaseData);
         card = _buildShirtCard({
-          idPrefix:   'jrp'+num,
-          cardTitle:  'Shirt '+num+' Details — '+_esc(purchaseData.memo||''),
-          isHoodie:   false,
-          isMandatory: false,
+          idPrefix:        'jrp'+num,
+          cardTitle:       'Shirt '+num+' Details — '+_esc(purchaseData.memo||''),
+          isHoodie:        false,
+          isMandatory:     false,
+          autoFillSleeves: purchaseData.sleeves || null,
+          autoFillHood:    purchaseData.hood    || null,
           onSave: function(payload, btn, errEl){
             payload.purchase_idx = purchaseData.purchase_idx;
             _saveJerseyPurchaseConfig(num, payload, btn, errEl);
@@ -1886,25 +1887,28 @@ function pageBalance(){
       infoCard.className = 'card stack';
       infoCard.id = 'sp_info_card';
 
-      var logoHtml = '';
-      if (res.business_logo_url){
-        logoHtml =
-          '<div id="sp_logo_wrap" style="width:160px;border-radius:10px;overflow:hidden;background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.15);margin-bottom:6px">'+
-            '<img id="sp_logo_img" alt="Business logo" style="width:100%;display:block;" />'+
-          '</div>';
-      }
+      // Parse stored address into parts (Street, City, State, Zip)
+      var addrParts = _parseUsAddress(res.address || '');
 
       infoCard.innerHTML =
         '<div class="label">Your Sponsor Profile</div>'+
-        logoHtml+
+        '<div id="sp_logo_wrap" style="width:160px;border-radius:10px;overflow:hidden;background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.15);margin-bottom:6px;display:none;">'+
+          '<img id="sp_logo_img" alt="Business logo" style="width:100%;display:block;" />'+
+        '</div>'+
         '<div class="form-grid">'+
           '<div class="stack"><label class="label">Business Name</label>'+
             '<input id="sp_biz_name" class="input" placeholder="Business Name" value="'+_esc(res.business_name||'')+'"></div>'+
-          '<div class="stack"><label class="label">Personal Address</label>'+
-            '<input id="sp_address" class="input" placeholder="123 Main St, City, TX 75001" value="'+_esc(res.address||'')+'"></div>'+
+          '<div class="stack"><label class="label">Street Address <span style=\"color:var(--err)\">*</span></label>'+
+            '<input id="sp_addr_street" class="input" placeholder="123 Main St" value="'+_esc(addrParts.street)+'"></div>'+
+          '<div class="stack"><label class="label">City <span style=\"color:var(--err)\">*</span></label>'+
+            '<input id="sp_addr_city" class="input" placeholder="City" value="'+_esc(addrParts.city)+'"></div>'+
+          '<div class="stack"><label class="label">State <span style=\"color:var(--err)\">*</span></label>'+
+            '<input id="sp_addr_state" class="input" placeholder="TX" maxlength="2" style=\"max-width:80px;text-transform:uppercase\" value="'+_esc(addrParts.state)+'"></div>'+
+          '<div class="stack"><label class="label">ZIP Code <span style=\"color:var(--err)\">*</span></label>'+
+            '<input id="sp_addr_zip" class="input" placeholder="75001" maxlength="10" value="'+_esc(addrParts.zip)+'"></div>'+
           '<div class="stack"><label class="label">Upload New Logo</label>'+
             '<input id="sp_logo_file" type="file" accept="image/*" class="input">'+
-            '<div class="tiny muted">If no new logo is uploaded, your previous year\'s logo will be used.</div>'+
+            '<div class="tiny muted">If no new logo is uploaded, your previous logo will be used.</div>'+
           '</div>'+
         '</div>'+
         '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px">'+
@@ -1914,36 +1918,32 @@ function pageBalance(){
 
       root.appendChild(infoCard);
 
-      /* ---- Shirt + Hoodie cards ---- */
+      /* ---- Hoodie card (all levels get exactly one) ---- */
+      if (isGold || isSilver || isBronze){
+        root.appendChild(_buildShirtCard({
+          idPrefix:    'sph1',
+          cardTitle:   'Sponsor Hoodie',
+          isHoodie:    true,
+          isMandatory: false,
+          onSave: _makeSponsorShirtSaver('sponsor_hoodie', 1)
+        }, res.hoodie1 || {}));
+      }
+
+      /* ---- Shirt cards with Athletic/Cotton chooser ---- */
       var shirtCount = isGold || isSilver ? 2 : isBronze ? 1 : 0;
       for (var s = 1; s <= shirtCount; s++){
-        root.appendChild(_buildShirtCard({
-          idPrefix:  'sp'+s,
-          cardTitle: 'Sponsor Shirt '+s,
-          isHoodie:  false,
-          isMandatory: false,
-          onSave: _makeSponsorShirtSaver('sponsor', s)
-        }, res['shirt'+s] || {}));
-        root.appendChild(_buildShirtCard({
-          idPrefix:  'sp'+s+'h',
-          cardTitle: 'Hoodie '+s,
-          isHoodie:  true,
-          isMandatory: false,
-          onSave: _makeSponsorShirtSaver('sponsor_hoodie', s)
-        }, res['hoodie'+s] || {}));
+        root.appendChild(_buildSponsorShirtChooser(s, res['shirt'+s] || {}));
       }
 
       layout(root);
 
-      /* Wire logo preview */
-      if (res.business_logo_url){
-        var logoImg = document.getElementById('sp_logo_img');
-        var logoWrap = document.getElementById('sp_logo_wrap');
-        if (logoImg && logoWrap){
-          logoImg.src = res.business_logo_url;
-          logoImg.onload  = function(){ logoWrap.style.display = 'block'; };
-          logoImg.onerror = function(){ logoWrap.style.display = 'none'; };
-        }
+      /* Wire logo preview — always show if URL exists */
+      var logoImg = document.getElementById('sp_logo_img');
+      var logoWrap = document.getElementById('sp_logo_wrap');
+      if (logoImg && logoWrap && res.business_logo_url){
+        logoImg.src = res.business_logo_url;
+        logoImg.onload  = function(){ logoWrap.style.display = 'block'; };
+        logoImg.onerror = function(){ logoWrap.style.display = 'none'; };
       }
 
       /* Wire Save Profile button */
@@ -1957,9 +1957,9 @@ function pageBalance(){
     /* Sponsorship buttons HTML — idPrefix keeps IDs unique per context */
     function _sponsorButtonsHTML(idPrefix){
       return "<div class='event-actions' style='flex-wrap:wrap'>"+
-          "<button class='btn sponsor-btn' data-amount='453'  data-memo='Bronze Sponsorship'>$453<br/><span style='font-size:var(--fs-xs);opacity:.75'>Bronze</span></button>"+
-          "<button class='btn sponsor-btn' data-amount='786'  data-memo='Silver Sponsorship'>$786<br/><span style='font-size:var(--fs-xs);opacity:.75'>Silver</span></button>"+
-          "<button class='btn sponsor-btn' data-amount='1253' data-memo='Gold Sponsorship'>$1253<br/><span style='font-size:var(--fs-xs);opacity:.75'>Gold</span></button>"+
+          "<button class='btn sponsor-btn' data-amount='453'  data-memo='Bronze Sponsorship' style='background:#cd7f32;border-color:#cd7f32;color:#fff;'>$453<br/><span style='font-size:var(--fs-xs);opacity:.85'>Bronze</span></button>"+
+          "<button class='btn sponsor-btn' data-amount='786'  data-memo='Silver Sponsorship' style='background:#9fb3c8;border-color:#9fb3c8;color:#0b1220;'>$786<br/><span style='font-size:var(--fs-xs);opacity:.85'>Silver</span></button>"+
+          "<button class='btn sponsor-btn' data-amount='1253' data-memo='Gold Sponsorship'   style='background:#f59e0b;border-color:#f59e0b;color:#0b1220;'>$1253<br/><span style='font-size:var(--fs-xs);opacity:.85'>Gold</span></button>"+
         "</div>"+
         "<div class='event-actions' style='flex-wrap:wrap'>"+
           "<button class='btn secondary sponsor-btn' data-amount='21'  data-memo='Jaman Hub'>$21<br/><span style='font-size:var(--fs-xs);opacity:.75'>Jaman Hub</span></button>"+
@@ -2013,11 +2013,13 @@ function pageBalance(){
      * _buildShirtCard(opts, saved)
      *
      * opts = {
-     *   idPrefix   : string   unique prefix for all IDs (e.g. 'sp1', 'sp1h', 'jr1')
-     *   cardTitle  : string   header text
-     *   isHoodie   : bool     hoodie card — only Type + Size, no athletic fields
-     *   isMandatory: bool     all fields required (used for Jersey tab)
-     *   onSave     : fn(payload, btn, errEl)  called with validated data
+     *   idPrefix       : string   unique prefix for all IDs (e.g. 'sp1', 'sp1h', 'jr1')
+     *   cardTitle      : string   header text
+     *   isHoodie       : bool     hoodie card — only Type + Size, no athletic fields
+     *   isMandatory    : bool     all fields required (used for Jersey tab)
+     *   autoFillSleeves: string   if set, sleeves field is read-only with this value
+     *   autoFillHood   : string   if set, hood field is read-only with this value
+     *   onSave         : fn(payload, btn, errEl)  called with validated data
      * }
      * saved = previously-saved object (may be {})
      * ---------------------------------------------------------------------- */
@@ -2026,9 +2028,11 @@ function pageBalance(){
 
     function _buildShirtCard(opts, saved){
       saved = saved || {};
-      var p      = opts.idPrefix;
-      var isHood = !!opts.isHoodie;
-      var isMand = !!opts.isMandatory;
+      var p           = opts.idPrefix;
+      var isHood      = !!opts.isHoodie;
+      var isMand      = !!opts.isMandatory;
+      var autoSleeves = opts.autoFillSleeves || null; // e.g. 'Short' or 'Long'
+      var autoHood    = opts.autoFillHood    || null; // e.g. 'with Hood' or 'without Hood'
 
       var colorOpts = ATHLETIC_COLORS.map(function(c){
         return '<option value="'+c+'"'+(saved.color===c?' selected':'')+'>'+c+'</option>';
@@ -2042,26 +2046,47 @@ function pageBalance(){
       var html = '<div class="label">'+_esc(opts.cardTitle)+'</div>';
 
       if (!isHood){
-        /* Athletic fields (always shown — no fabric choice on jersey or hoodie card) */
+        /* Determine effective sleeves/hood — autofilled (locked) or user-selectable */
+        var sleevesHtml, hoodHtml;
+        if (autoSleeves){
+          sleevesHtml =
+            '<div class="stack"><label class="label">Sleeves</label>'+
+              '<input id="'+p+'_sleeves" class="input" value="'+_esc(autoSleeves)+'" readonly '+
+                'style="background:var(--surface);color:var(--muted);cursor:not-allowed;"></div>';
+        } else {
+          sleevesHtml =
+            '<div class="stack"><label class="label">Sleeves '+req+'</label>'+
+              '<select id="'+p+'_sleeves" class="input">'+
+                '<option value="">Select…</option>'+
+                '<option value="Short"'+(saved.sleeves==='Short'?' selected':'')+'>Short</option>'+
+                '<option value="Long"'+(saved.sleeves==='Long'?' selected':'')+'>Long</option>'+
+              '</select></div>';
+        }
+        if (autoHood){
+          hoodHtml =
+            '<div class="stack"><label class="label">Hood</label>'+
+              '<input id="'+p+'_hood" class="input" value="'+_esc(autoHood)+'" readonly '+
+                'style="background:var(--surface);color:var(--muted);cursor:not-allowed;"></div>';
+        } else {
+          hoodHtml =
+            '<div class="stack"><label class="label">Hood '+req+'</label>'+
+              '<select id="'+p+'_hood" class="input">'+
+                '<option value="">Select…</option>'+
+                '<option value="with Hood"'+(saved.hood==='with Hood'?' selected':'')+'>With Hood</option>'+
+                '<option value="without Hood"'+(saved.hood==='without Hood'?' selected':'')+'>Without Hood</option>'+
+              '</select></div>';
+        }
+
+        /* Athletic fields */
         html +=
           '<div class="stack"><label class="label">Color '+req+'</label>'+
             '<select id="'+p+'_color" class="input"><option value="">Select color…</option>'+colorOpts+'</select></div>'+
           '<div class="stack"><label class="label">Name on Back'+(isMand?'':' (optional)')+'</label>'+
             '<input id="'+p+'_name" class="input" placeholder="'+(isMand?'Required':'Optional')+'" value="'+_esc(saved.name_on_back||'')+'"></div>'+
           '<div class="stack"><label class="label">Number on Back'+(isMand?'':' (optional)')+'</label>'+
-            '<input id="'+p+'_number" class="input" placeholder="'+(isMand?'Required':'Optional')+'" value="'+_esc(saved.number_on_back||'')+'"></div>'+
-          '<div class="stack"><label class="label">Sleeves '+req+'</label>'+
-            '<select id="'+p+'_sleeves" class="input">'+
-              '<option value="">Select…</option>'+
-              '<option value="Short"'+(saved.sleeves==='Short'?' selected':'')+'>Short</option>'+
-              '<option value="Long"'+(saved.sleeves==='Long'?' selected':'')+'>Long</option>'+
-            '</select></div>'+
-          '<div class="stack"><label class="label">Hood '+req+'</label>'+
-            '<select id="'+p+'_hood" class="input">'+
-              '<option value="">Select…</option>'+
-              '<option value="with Hood"'+(saved.hood==='with Hood'?' selected':'')+'>With Hood</option>'+
-              '<option value="without Hood"'+(saved.hood==='without Hood'?' selected':'')+'>Without Hood</option>'+
-            '</select></div>';
+            '<input id="'+p+'_number" class="input" type="text" inputmode="numeric" maxlength="2" placeholder="'+(isMand?'Required (max 2 digits)':'Optional (max 2 digits)')+'" value="'+_esc(saved.number_on_back||'')+'"></div>'+
+          sleevesHtml+
+          hoodHtml;
       }
 
       /* Shared: Type + Size */
@@ -2084,16 +2109,22 @@ function pageBalance(){
       card.id = 'card_'+p;
       card.innerHTML = html;
 
-      /* Wire save button */
+      /* Enforce numeric-only + max 2 digits on number field */
       setTimeout(function(){
+        var numField = document.getElementById(p+'_number');
+        if (numField){
+          numField.addEventListener('input', function(){
+            this.value = this.value.replace(/[^0-9]/g,'').slice(0,2);
+          });
+        }
         var btn = document.getElementById(p+'_save_btn');
-        if (btn) btn.onclick = function(){ _validateAndSaveShirt(p, isHood, isMand, opts.onSave, btn); };
+        if (btn) btn.onclick = function(){ _validateAndSaveShirt(p, isHood, isMand, opts.onSave, btn, autoSleeves, autoHood); };
       }, 0);
 
       return card;
     }
 
-    function _validateAndSaveShirt(p, isHood, isMand, onSave, btn){
+    function _validateAndSaveShirt(p, isHood, isMand, onSave, btn, autoSleeves, autoHood){
       var errEl = document.getElementById(p+'_err');
       function setErr(m){ if(errEl) errEl.textContent = m||''; }
       setErr('');
@@ -2107,13 +2138,15 @@ function pageBalance(){
 
       if (!isHood){
         var color   = (document.getElementById(p+'_color')||{}).value || '';
-        var sleeves = (document.getElementById(p+'_sleeves')||{}).value || '';
-        var hood    = (document.getElementById(p+'_hood')||{}).value || '';
+        // Sleeves and hood: use autofill value if provided (readonly field), else read select
+        var sleeves = autoSleeves || (document.getElementById(p+'_sleeves')||{}).value || '';
+        var hood    = autoHood    || (document.getElementById(p+'_hood')||{}).value || '';
         var name    = (document.getElementById(p+'_name')||{}).value || '';
         var number  = (document.getElementById(p+'_number')||{}).value || '';
         if (!color)            { setErr('Please choose a color.'); return; }
         if (isMand && !name)   { setErr('Name on back is required.'); return; }
         if (isMand && !number) { setErr('Number on back is required.'); return; }
+        if (number && !/^\d{1,2}$/.test(number)) { setErr('Number on back must be 1-2 digits.'); return; }
         if (!sleeves)          { setErr('Please choose sleeves.'); return; }
         if (!hood)             { setErr('Please choose hood.'); return; }
         payload.color          = color;
@@ -2127,6 +2160,84 @@ function pageBalance(){
       }
 
       if (onSave) onSave(payload, btn, errEl);
+    }
+
+    /* Sponsor shirt chooser — Athletic vs Cotton picker, then shows the right card */
+    function _buildSponsorShirtChooser(num, saved){
+      var wrap = document.createElement('div');
+      wrap.className = 'card stack';
+      wrap.id = 'sp_chooser_'+num;
+
+      // Determine initial fabric from saved data (if any)
+      var savedFabric = (saved.fabric || '').toLowerCase();
+      var initialChoice = savedFabric === 'cotton' ? 'cotton' : (savedFabric === 'athletic' ? 'athletic' : '');
+
+      function renderChooser(){
+        wrap.innerHTML =
+          '<div class="label">Sponsor Shirt '+num+'</div>'+
+          '<div class="tiny muted" style="margin-bottom:8px">Choose shirt type:</div>'+
+          '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
+            '<button class="btn'+(initialChoice==='athletic'?' ':' secondary')+'" id="sp_ch_ath_'+num+'">Athletic</button>'+
+            '<button class="btn'+(initialChoice==='cotton'?' ':' secondary')+'" id="sp_ch_cot_'+num+'">Cotton</button>'+
+          '</div>';
+
+        setTimeout(function(){
+          var athBtn = document.getElementById('sp_ch_ath_'+num);
+          var cotBtn = document.getElementById('sp_ch_cot_'+num);
+
+          function showCard(type){
+            initialChoice = type;
+            var isHoodie = false; // athletic uses full shirt fields
+            var cardEl;
+            if (type === 'cotton'){
+              cardEl = _buildShirtCard({
+                idPrefix:    'sp_cot_'+num,
+                cardTitle:   'Sponsor Shirt '+num+' — Cotton',
+                isHoodie:    true,  // reuse hoodie mode (Type+Size only)
+                isMandatory: false,
+                onSave: function(payload, btn, errEl){
+                  payload.fabric = 'Cotton';
+                  _makeSponsorShirtSaver('sponsor', num)(payload, btn, errEl);
+                }
+              }, saved.fabric && saved.fabric.toLowerCase()==='cotton' ? saved : {});
+            } else {
+              cardEl = _buildShirtCard({
+                idPrefix:    'sp_ath_'+num,
+                cardTitle:   'Sponsor Shirt '+num+' — Athletic',
+                isHoodie:    false,
+                isMandatory: false,
+                onSave: function(payload, btn, errEl){
+                  payload.fabric = 'Athletic';
+                  _makeSponsorShirtSaver('sponsor', num)(payload, btn, errEl);
+                }
+              }, saved.fabric && saved.fabric.toLowerCase()==='athletic' ? saved : {});
+            }
+            // Replace this chooser card with the config card + a "Change type" link
+            var changeRow = document.createElement('div');
+            changeRow.style.cssText = 'margin-top:8px';
+            changeRow.innerHTML = '<button class="btn secondary" id="sp_ch_back_'+num+'" style="font-size:var(--fs-xs)">← Change shirt type</button>';
+            cardEl.appendChild(changeRow);
+            wrap.replaceWith(cardEl);
+            // Wire back button
+            setTimeout(function(){
+              var backBtn = document.getElementById('sp_ch_back_'+num);
+              if (backBtn) backBtn.onclick = function(){
+                // Rebuild chooser in place
+                var fresh = _buildSponsorShirtChooser(num, {});
+                cardEl.replaceWith(fresh);
+              };
+            }, 0);
+          }
+
+          if (athBtn) athBtn.onclick = function(){ showCard('athletic'); };
+          if (cotBtn) cotBtn.onclick = function(){ showCard('cotton'); };
+
+          // If a fabric was already saved, auto-expand to that card
+          if (initialChoice) showCard(initialChoice);
+        }, 0);
+      }
+      renderChooser();
+      return wrap;
     }
 
     /* Sponsor shirt save — calls api_saveSponsorShirt(its, context, num, payload)
@@ -2150,6 +2261,31 @@ function pageBalance(){
       };
     }
 
+    /* Parse a stored "Street, City, ST ZIP" string back into parts */
+    function _parseUsAddress(addr){
+      addr = String(addr || '').trim();
+      var result = { street: '', city: '', state: '', zip: '' };
+      if (!addr) return result;
+      // Expected format: "Street, City, ST ZIP"
+      var parts = addr.split(',');
+      if (parts.length >= 3){
+        result.street = parts[0].trim();
+        result.city   = parts[1].trim();
+        var stzip = parts[2].trim().split(/\s+/);
+        result.state = stzip[0] || '';
+        result.zip   = stzip[1] || '';
+      } else if (parts.length === 2){
+        result.street = parts[0].trim();
+        var rest = parts[1].trim().split(/\s+/);
+        result.city  = rest.slice(0, -2).join(' ');
+        result.state = rest[rest.length-2] || '';
+        result.zip   = rest[rest.length-1] || '';
+      } else {
+        result.street = addr;
+      }
+      return result;
+    }
+
     /* Save business name, address, optional logo upload */
     function _saveSponsorProfile(btn){
       var errEl = document.getElementById('sp_save_err');
@@ -2157,8 +2293,19 @@ function pageBalance(){
       setErr('');
 
       var bizName = (document.getElementById('sp_biz_name')||{}).value || '';
-      var address = (document.getElementById('sp_address')||{}).value || '';
+      var street  = ((document.getElementById('sp_addr_street')||{}).value || '').trim();
+      var city    = ((document.getElementById('sp_addr_city')||{}).value || '').trim();
+      var state   = ((document.getElementById('sp_addr_state')||{}).value || '').trim().toUpperCase();
+      var zip     = ((document.getElementById('sp_addr_zip')||{}).value || '').trim();
       var file    = (document.getElementById('sp_logo_file')||{}).files[0] || null;
+
+      // Validate all address fields
+      if (!street){ setErr('Street address is required.'); return; }
+      if (!city)  { setErr('City is required.'); return; }
+      if (!state) { setErr('State is required.'); return; }
+      if (!zip)   { setErr('ZIP code is required.'); return; }
+
+      var address = street + ', ' + city + ', ' + state + ' ' + zip;
 
       withClickLock('sponsor:profile:'+state.user.its, btn, 'Saving…', function(done){
         function finalize(logoUrl){
@@ -2171,6 +2318,16 @@ function pageBalance(){
               // Update local state
               state.user = Object.assign({}, state.user, payload);
               setErr('');
+              // Update thumbnail if a new logo was uploaded
+              if (logoUrl){
+                var logoWrap = document.getElementById('sp_logo_wrap');
+                var logoImg  = document.getElementById('sp_logo_img');
+                if (logoImg && logoWrap){
+                  logoImg.src = logoUrl;
+                  logoImg.onload  = function(){ logoWrap.style.display = 'block'; };
+                  logoImg.onerror = function(){ logoWrap.style.display = 'none'; };
+                }
+              }
               var origHTML = btn.innerHTML;
               btn.innerHTML = '✓ Saved';
               setTimeout(function(){ btn.innerHTML = origHTML; }, 1800);
@@ -2183,7 +2340,10 @@ function pageBalance(){
           var fr = new FileReader();
           fr.onload = function(){
             google.script.run
-              .withSuccessHandler(function(u){ finalize(u && u.url); })
+              .withSuccessHandler(function(u){
+                if (!u || !u.ok){ done(); setErr((u && u.error)||'Logo upload failed.'); return; }
+                finalize(u.url);
+              })
               .withFailureHandler(function(e){ done(); setErr((e && e.message)||'Logo upload failed.'); })
               .api_uploadSponsorLogo(state.user.its, fr.result, file.name);
           };
