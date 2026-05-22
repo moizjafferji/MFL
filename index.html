@@ -1864,20 +1864,7 @@ function pageBalance(){
           '></iframe>'+
         '</div>'+
 
-        // ── Charts ──
-        // Google Sheets publishes each chart at:
-        // pubhtml?gid=GID&single=true&widget=true  (shows full sheet incl charts)
-        // For individual charts use the /chart?oid=N endpoint.
-        // We embed the full published tab in a second taller iframe so both charts are visible.
-        '<div class="label" style="font-size:var(--fs-md);font-weight:600;margin-top:16px;margin-bottom:8px">Goal Charts</div>'+
-        '<div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px;border:1px solid var(--border)">'+
-          '<iframe'+
-            ' src="'+GOALS_PUB_BASE+'?gid='+GOALS_GID+'&single=true&widget=true&rm=minimal"'+
-            ' style="width:100%;min-width:360px;height:900px;border:none;display:block;"'+
-            ' loading="lazy"'+
-            ' title="MFL Goal Charts"'+
-          '></iframe>'+
-        '</div>';
+        '';  // charts section removed
 
       root.appendChild(card);
 
