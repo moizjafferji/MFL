@@ -1590,7 +1590,7 @@ function pageBalance(){
 
   var balBox = $('#bal_box');
   balBox.querySelector('#copyEmailBtn').addEventListener('click', function(){ copyText(email, this); });
-  balBox.querySelector('#balRegisterBtn').addEventListener('click', function(){ setPage('events'); });
+  balBox.querySelector('#balRegisterBtn').addEventListener('click', function(){ window.location.href = 'https://mflt.meemjeem.com/#/event/EV-1779377563569'; });
   balBox.querySelector('#copyMemoBtn').addEventListener('click',  function(){ copyText(memoText, this); });
   balBox.querySelector('#downloadCsvBtn').addEventListener('click', function(){
     var btn = this, orig = btn.textContent;
