@@ -1842,92 +1842,48 @@ function pageBalance(){
      * Always calls callback even on failure (shows error state in card).
      * ---------------------------------------------------------------------- */
     function _appendGoalsCard(root, callback){
+      var GOALS_GID = '1758204845';
+      var GOALS_PUB_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRM0EUrKcxz8xt_2xrfZeLqe0JTl9zJeC5p8z9rPt4a0jQekMccwG3a_5ujYqmQweo-2FD7QtfSBoEl/pubhtml';
+
       var card = document.createElement('div');
       card.className = 'card stack';
       card.id = 'sp_goals_card';
-      card.innerHTML = '<div class="label" style="font-size:var(--fs-lg);font-weight:700;margin-bottom:4px">MFL Goals</div>'+
-                       '<div class="muted" id="sp_goals_body">Loading…</div>';
+
+      // Responsive wrapper: full-width, scrollable horizontally if needed,
+      // tall enough to show all 44 rows without an internal scrollbar
+      card.innerHTML =
+        '<div class="label" style="font-size:var(--fs-lg);font-weight:700;margin-bottom:8px">MFL Goals</div>'+
+
+        // ── Data range A1:D44 ──
+        '<div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px;border:1px solid var(--border)">'+
+          '<iframe'+
+            ' src="'+GOALS_PUB_BASE+'?gid='+GOALS_GID+'&single=true&range=A1:D44&rm=minimal"'+
+            ' style="width:100%;min-width:360px;height:1100px;border:none;display:block;"'+
+            ' loading="lazy"'+
+            ' title="MFL Goals"'+
+          '></iframe>'+
+        '</div>'+
+
+        // ── Charts ──
+        // Google Sheets publishes each chart at:
+        // pubhtml?gid=GID&single=true&widget=true  (shows full sheet incl charts)
+        // For individual charts use the /chart?oid=N endpoint.
+        // We embed the full published tab in a second taller iframe so both charts are visible.
+        '<div class="label" style="font-size:var(--fs-md);font-weight:600;margin-top:16px;margin-bottom:8px">Goal Charts</div>'+
+        '<div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px;border:1px solid var(--border)">'+
+          '<iframe'+
+            ' src="'+GOALS_PUB_BASE+'?gid='+GOALS_GID+'&single=true&widget=true&rm=minimal"'+
+            ' style="width:100%;min-width:360px;height:900px;border:none;display:block;"'+
+            ' loading="lazy"'+
+            ' title="MFL Goal Charts"'+
+          '></iframe>'+
+        '</div>';
+
       root.appendChild(card);
 
-      function setBody(html){
-        var body = document.getElementById('sp_goals_body');
-        if (body) body.innerHTML = html;
-      }
-
-      // Use fetch directly against /gas so we get real HTTP error info
-      // and a hard 15s timeout — never hangs forever
-      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      var timer = setTimeout(function(){
-        if (controller) controller.abort();
-        setBody('<span style="color:var(--err)">Goals timed out. Check GAS logs for api_getGoals.</span>');
-        callback();
-      }, 15000);
-
-      fetch('/gas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'api_getGoals', args: [] }),
-        signal: controller ? controller.signal : undefined
-      })
-      .then(function(r){
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function(res){
-        clearTimeout(timer);
-        if (!res || !res.ok){
-          setBody('<span style="color:var(--err)">Could not load goals'+(res&&res.error?': '+res.error:'')+'.</span>');
-          callback(); return;
-        }
-        if (res._tabNotFound){
-          setBody('<span class="muted">Goals tab not found — looking for a sheet tab named &ldquo;'+(res._tabName||'Goal')+'&rdquo;.</span>');
-          callback(); return;
-        }
-        if (!res.rows || res.rows.length === 0){
-          setBody('<span class="muted">No goals posted yet.</span>');
-          callback(); return;
-        }
-
-        var headers = res.headers || [];
-        var rows    = res.rows;
-        var html    = '';
-
-        if (headers.length > 0){
-          html += '<div style="overflow-x:auto"><table class="table table--compact" style="width:100%;margin-top:4px">'+
-            '<thead><tr>'+headers.map(function(h){ return '<th>'+_esc(String(h))+'</th>'; }).join('')+'</tr></thead><tbody>';
-          rows.forEach(function(row){
-            html += '<tr>'+headers.map(function(h){
-              var v = row[h];
-              if (v instanceof Date) v = v.toLocaleDateString();
-              else if (typeof v === 'number') v = v.toLocaleString();
-              return '<td>'+_esc(String(v==null?'':v))+'</td>';
-            }).join('')+'</tr>';
-          });
-          html += '</tbody></table></div>';
-        } else {
-          rows.forEach(function(row, ri){
-            if (ri > 0) html += '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0">';
-            Object.keys(row).forEach(function(k){
-              if (!k) return;
-              var v = row[k];
-              if (v instanceof Date) v = v.toLocaleDateString();
-              else if (typeof v === 'number') v = v.toLocaleString();
-              html += '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-                '<span class="label" style="min-width:120px">'+_esc(k)+'</span>'+
-                '<span>'+_esc(String(v==null?'':v))+'</span></div>';
-            });
-          });
-        }
-
-        setBody(html);
-        callback();
-      })
-      .catch(function(e){
-        clearTimeout(timer);
-        if (e && e.name === 'AbortError') return; // timeout handler already fired
-        setBody('<span style="color:var(--err)">Goals failed: '+(e&&e.message?e.message:'network error')+'</span>');
-        callback();
-      });
+      // No async call needed — iframe loads independently.
+      // Call callback immediately so layout() and button wiring proceed.
+      callback();
     }
 
     function _renderSponsorPage(res){
