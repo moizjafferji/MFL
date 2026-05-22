@@ -1860,7 +1860,7 @@ function pageBalance(){
             return;
           }
           if (res._tabNotFound){
-            body.innerHTML = '<span class="muted">Goals tab not found in spreadsheet.</span>';
+            body.innerHTML = '<span class="muted">Goals tab not found in spreadsheet (looking for tab named &ldquo;'+(res._tabName||'Goal')+'&rdquo;).</span>';
             callback();
             return;
           }
