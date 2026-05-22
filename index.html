@@ -1578,6 +1578,7 @@ function pageBalance(){
         '<br/><div class="tiny muted" style="margin-top:6px">Please allow up to 10 minutes for balance to update.</div>'+
         '<br/>'+
         '<button id="balRegisterBtn" class="btn">Register</button>'+
+        '<button id="balHelpMemoBtn" class="btn secondary" style="margin-left:8px">Help! Forgot Memo</button>'+
       '</div>'+
       '<table class="table table--compact" style="margin-top:10px">'+
         '<thead><tr><th>Date</th><th>Event</th><th>Status</th><th class="right">Amount</th></tr></thead>'+
@@ -1591,6 +1592,62 @@ function pageBalance(){
   var balBox = $('#bal_box');
   balBox.querySelector('#copyEmailBtn').addEventListener('click', function(){ copyText(email, this); });
   balBox.querySelector('#balRegisterBtn').addEventListener('click', function(){ window.location.href = 'https://mflt.meemjeem.com/#/event/EV-1779377563569'; });
+  balBox.querySelector('#balHelpMemoBtn').addEventListener('click', function(){
+    // Show confirmation modal
+    var u = state.user || {};
+    var name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.its || '';
+    var modal = document.createElement('div');
+    modal.id = 'memo_help_modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML =
+      '<div style="background:var(--card);border-radius:14px;padding:24px;max-width:400px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3)">'+
+        '<div style="font-size:var(--fs-lg);font-weight:700;margin-bottom:10px">Need Memo Help?</div>'+
+        '<div style="margin-bottom:16px;line-height:1.5">'+
+          'Confirm if you forgot to add the Memo and need help to have your Zelle reflect on your balance.'+
+        '</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
+          '<button id="memo_help_confirm" class="btn">Yes, I need help</button>'+
+          '<button id="memo_help_cancel" class="btn secondary">Cancel</button>'+
+        '</div>'+
+        '<div id="memo_help_err" style="margin-top:8px;font-size:var(--fs-xs);color:var(--err)"></div>'+
+      '</div>';
+    document.body.appendChild(modal);
+
+    modal.querySelector('#memo_help_cancel').onclick = function(){ modal.remove(); };
+    modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
+
+    modal.querySelector('#memo_help_confirm').onclick = function(){
+      var confirmBtn = this;
+      var errEl = modal.querySelector('#memo_help_err');
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Submitting…';
+      errEl.textContent = '';
+
+      google.script.run
+        .withSuccessHandler(function(r){
+          if (!r || !r.ok){
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Yes, I need help';
+            errEl.textContent = (r && r.error) || 'Something went wrong. Please try again.';
+            return;
+          }
+          // Success — replace modal content
+          modal.querySelector('div').innerHTML =
+            '<div style="font-size:var(--fs-lg);font-weight:700;margin-bottom:10px">✓ Request Received</div>'+
+            '<div style="line-height:1.5;margin-bottom:16px">'+
+              'We will manually search for your transaction within 24 hours, InshAllah.'+
+            '</div>'+
+            '<button id="memo_help_close" class="btn">Close</button>';
+          modal.querySelector('#memo_help_close').onclick = function(){ modal.remove(); };
+        })
+        .withFailureHandler(function(e){
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'Yes, I need help';
+          errEl.textContent = (e && e.message) || 'Something went wrong. Please try again.';
+        })
+        .api_submitMemoHelp(u.its, name);
+    };
+  });
   balBox.querySelector('#copyMemoBtn').addEventListener('click',  function(){ copyText(memoText, this); });
   balBox.querySelector('#downloadCsvBtn').addEventListener('click', function(){
     var btn = this, orig = btn.textContent;
