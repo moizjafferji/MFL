@@ -2441,18 +2441,33 @@ function pageBalance(){
         }
 
         if (file){
-          var fr = new FileReader();
-          fr.onload = function(){
-            google.script.run
-              .withSuccessHandler(function(u){
-                if (!u || !u.ok){ done(); setErr((u && u.error)||'Logo upload failed.'); return; }
-                finalize(u.url);
-              })
-              .withFailureHandler(function(e){ done(); setErr((e && e.message)||'Logo upload failed.'); })
-              .api_uploadSponsorLogo(its, fr.result, file.name);
-          };
-          fr.onerror = function(){ done(); setErr('Could not read image.'); };
-          fr.readAsDataURL(file);
+          // Step 1: get raw GAS exec URL (bypasses Cloudflare size limit for large images)
+          google.script.run
+            .withSuccessHandler(function(urlRes){
+              if (!urlRes || !urlRes.ok){ done(); setErr('Upload config missing: '+(urlRes&&urlRes.error||'GAS_EXEC_URL not set')); return; }
+              var gasExecUrl = urlRes.url;
+
+              // Step 2: read file as base64
+              var fr = new FileReader();
+              fr.onload = function(){
+                // Step 3: POST directly to GAS exec URL, not through Cloudflare
+                fetch(gasExecUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ method: 'api_uploadSponsorLogo', args: [its, fr.result, file.name] })
+                })
+                .then(function(r){ return r.json(); })
+                .then(function(u){
+                  if (!u || !u.ok){ done(); setErr((u && u.error)||'Logo upload failed.'); return; }
+                  finalize(u.url);
+                })
+                .catch(function(e){ done(); setErr('Logo upload failed: '+(e&&e.message||'network error')); });
+              };
+              fr.onerror = function(){ done(); setErr('Could not read image file.'); };
+              fr.readAsDataURL(file);
+            })
+            .withFailureHandler(function(e){ done(); setErr('Could not get upload URL: '+(e&&e.message||'')); })
+            .api_getUploadUrl();
         } else {
           finalize(null);
         }
