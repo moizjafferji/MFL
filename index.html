@@ -2389,30 +2389,6 @@ function pageBalance(){
       return result;
     }
 
-    /* -----------------------------------------------------------------------
-     * _resizeImageFile_(file, maxPx, callback(dataUrl, err))
-     * Draws the image onto a canvas capped at maxPx on the longest side,
-     * then exports as JPEG at 0.82 quality. Keeps files well under 100KB.
-     * ---------------------------------------------------------------------- */
-    function _resizeImageFile_(file, maxPx, callback){
-      var url = URL.createObjectURL(file);
-      var img = new Image();
-      img.onload = function(){
-        URL.revokeObjectURL(url);
-        var w = img.naturalWidth, h = img.naturalHeight;
-        if (w > maxPx || h > maxPx){
-          if (w >= h){ h = Math.round(h * maxPx / w); w = maxPx; }
-          else       { w = Math.round(w * maxPx / h); h = maxPx; }
-        }
-        var canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        callback(canvas.toDataURL('image/jpeg', 0.82), null);
-      };
-      img.onerror = function(){ URL.revokeObjectURL(url); callback(null, true); };
-      img.src = url;
-    }
-
     /* Save business name, address, optional logo upload */
     function _saveSponsorProfile(btn){
       var errEl = document.getElementById('sp_save_err');
@@ -2438,15 +2414,14 @@ function pageBalance(){
       withClickLock('sponsor:profile:'+its, btn, 'Saving…', function(done){
         function finalize(logoUrl){
           var payload = { business_name: bizName, address: address };
-          if (logoUrl) payload.business_logo_url = logoUrl;
           google.script.run
             .withSuccessHandler(function(r){
               done();
               if (!r || !r.ok){ setErr((r && r.error)||'Save failed.'); return; }
-              // Update local state
               state.user = Object.assign({}, state.user, payload);
+              if (logoUrl) state.user.business_logo_url = logoUrl;
               setErr('');
-              // Update thumbnail if a new logo was uploaded (gold/silver/bronze only)
+              // Update thumbnail immediately after upload
               if (logoUrl){
                 var logoWrap = document.getElementById('sp_logo_wrap');
                 var logoImg  = document.getElementById('sp_logo_img');
@@ -2465,18 +2440,19 @@ function pageBalance(){
         }
 
         if (file){
-          // Resize image client-side to max 800px before encoding,
-          // keeping it well under Cloudflare's body limit
-          _resizeImageFile_(file, 800, function(dataUrl, err){
-            if (err){ done(); setErr('Could not read image file.'); return; }
+          // Upload logo first (writes URL to sheet directly, mirrors profile pic flow)
+          var fr = new FileReader();
+          fr.onload = function(){
             google.script.run
               .withSuccessHandler(function(u){
                 if (!u || !u.ok){ done(); setErr((u && u.error)||'Logo upload failed.'); return; }
                 finalize(u.url);
               })
               .withFailureHandler(function(e){ done(); setErr((e && e.message)||'Logo upload failed.'); })
-              .api_uploadSponsorLogo(its, dataUrl, file.name);
-          });
+              .api_uploadSponsorLogo(its, fr.result, file.name);
+          };
+          fr.onerror = function(){ done(); setErr('Could not read image file.'); };
+          fr.readAsDataURL(file);
         } else {
           finalize(null);
         }
@@ -3081,16 +3057,18 @@ if (saveBtn) saveBtn.onclick = (ev)=> saveProfile(!!edit, ev.currentTarget);
       }
     };
 
-    // Optional image upload step — resize client-side before sending to stay under Cloudflare limit
+    // Optional image upload step
     if (file){
       try{
-        _resizeImageFile_(file, 800, function(dataUrl, err){
-          if (err){ done(); setErr('Could not read image.'); return; }
+        const fr = new FileReader();
+        fr.onload = function(){
           google.script.run
             .withSuccessHandler(function(u){ finalize(u && u.url); })
             .withFailureHandler(function(e){ done(); setErr((e && e.message) || 'Upload failed'); })
-            .api_uploadProfilePic(dataUrl, file.name, edit ? state.user.its : data.its);
-        });
+            .api_uploadProfilePic(fr.result, file.name, edit ? state.user.its : data.its);
+        };
+        fr.onerror = function(){ done(); setErr('Could not read image.'); };
+        fr.readAsDataURL(file);
       } catch(_){
         done(); setErr('Could not read image.');
       }
