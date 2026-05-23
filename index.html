@@ -1772,7 +1772,7 @@ function pageBalance(){
         return '<button class="btn secondary jr-price-btn" data-idx="'+i+'" style="text-align:left;justify-content:flex-start">'+_esc(opt.label)+'</button>';
       }).join('');
       purchaseCard.innerHTML =
-        '<div class="label">Purchase a Shirt</div>'+
+        '<div class="label">Purchase an extra shirt</div>'+
         '<div class="stack" style="gap:8px">'+btnRows+'</div>'+
         '<div class="tiny" id="jr_buy_err" style="color:var(--err);margin-top:4px"></div>';
       root.appendChild(purchaseCard);
@@ -1987,9 +1987,11 @@ function pageBalance(){
 
       infoCard.innerHTML =
         '<div class="label">Your Sponsor Profile</div>'+
-        '<div id="sp_logo_wrap" style="width:160px;border-radius:10px;overflow:hidden;background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.15);margin-bottom:6px;display:none;">'+
-          '<img id="sp_logo_img" alt="Business logo" style="width:100%;display:block;" />'+
-        '</div>'+
+        (isGold||isSilver||isBronze ?
+          '<div id="sp_logo_wrap" style="width:100%;max-width:240px;margin:0 auto 8px auto;border-radius:12px;overflow:hidden;background:var(--surface2,#f0f0f0);box-shadow:0 2px 8px rgba(0,0,0,0.12);display:none;">'+
+            '<img id="sp_logo_img" alt="Business logo" style="width:100%;height:100%;object-fit:cover;display:block;aspect-ratio:1/1;" />'+
+          '</div>'
+        : '')+
         '<div class="form-grid">'+
           '<div class="stack"><label class="label">Business Name</label>'+
             '<input id="sp_biz_name" class="input" placeholder="Business Name" value="'+_esc(res.business_name||'')+'"></div>'+
@@ -2035,13 +2037,15 @@ function pageBalance(){
       _appendGoalsCard(root, function(){
         layout(root);
 
-        /* Wire logo preview — always show if URL exists */
-        var logoImg = document.getElementById('sp_logo_img');
-        var logoWrap = document.getElementById('sp_logo_wrap');
-        if (logoImg && logoWrap && res.business_logo_url){
-          logoImg.src = res.business_logo_url;
-          logoImg.onload  = function(){ logoWrap.style.display = 'block'; };
-          logoImg.onerror = function(){ logoWrap.style.display = 'none'; };
+        /* Wire logo preview — gold/silver/bronze only, only if URL exists in column X */
+        if ((isGold||isSilver||isBronze) && res.business_logo_url){
+          var logoImg  = document.getElementById('sp_logo_img');
+          var logoWrap = document.getElementById('sp_logo_wrap');
+          if (logoImg && logoWrap){
+            logoImg.src = res.business_logo_url;
+            logoImg.onload  = function(){ logoWrap.style.display = 'block'; };
+            logoImg.onerror = function(){ logoWrap.style.display = 'none'; };
+          }
         }
 
         /* Wire Save Profile button */
@@ -2418,7 +2422,7 @@ function pageBalance(){
               // Update local state
               state.user = Object.assign({}, state.user, payload);
               setErr('');
-              // Update thumbnail if a new logo was uploaded
+              // Update thumbnail if a new logo was uploaded (gold/silver/bronze only)
               if (logoUrl){
                 var logoWrap = document.getElementById('sp_logo_wrap');
                 var logoImg  = document.getElementById('sp_logo_img');
