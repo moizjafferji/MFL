@@ -2389,6 +2389,30 @@ function pageBalance(){
       return result;
     }
 
+    /* -----------------------------------------------------------------------
+     * _resizeImageFile_(file, maxPx, callback(dataUrl, err))
+     * Draws the image onto a canvas capped at maxPx on the longest side,
+     * then exports as JPEG at 0.82 quality. Keeps files well under 100KB.
+     * ---------------------------------------------------------------------- */
+    function _resizeImageFile_(file, maxPx, callback){
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        URL.revokeObjectURL(url);
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (w > maxPx || h > maxPx){
+          if (w >= h){ h = Math.round(h * maxPx / w); w = maxPx; }
+          else       { w = Math.round(w * maxPx / h); h = maxPx; }
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        callback(canvas.toDataURL('image/jpeg', 0.82), null);
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); callback(null, true); };
+      img.src = url;
+    }
+
     /* Save business name, address, optional logo upload */
     function _saveSponsorProfile(btn){
       var errEl = document.getElementById('sp_save_err');
@@ -2441,33 +2465,18 @@ function pageBalance(){
         }
 
         if (file){
-          // Step 1: get raw GAS exec URL (bypasses Cloudflare size limit for large images)
-          google.script.run
-            .withSuccessHandler(function(urlRes){
-              if (!urlRes || !urlRes.ok){ done(); setErr('Upload config missing: '+(urlRes&&urlRes.error||'GAS_EXEC_URL not set')); return; }
-              var gasExecUrl = urlRes.url;
-
-              // Step 2: read file as base64
-              var fr = new FileReader();
-              fr.onload = function(){
-                // Step 3: POST directly to GAS exec URL, not through Cloudflare
-                fetch(gasExecUrl, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ method: 'api_uploadSponsorLogo', args: [its, fr.result, file.name] })
-                })
-                .then(function(r){ return r.json(); })
-                .then(function(u){
-                  if (!u || !u.ok){ done(); setErr((u && u.error)||'Logo upload failed.'); return; }
-                  finalize(u.url);
-                })
-                .catch(function(e){ done(); setErr('Logo upload failed: '+(e&&e.message||'network error')); });
-              };
-              fr.onerror = function(){ done(); setErr('Could not read image file.'); };
-              fr.readAsDataURL(file);
-            })
-            .withFailureHandler(function(e){ done(); setErr('Could not get upload URL: '+(e&&e.message||'')); })
-            .api_getUploadUrl();
+          // Resize image client-side to max 800px before encoding,
+          // keeping it well under Cloudflare's body limit
+          _resizeImageFile_(file, 800, function(dataUrl, err){
+            if (err){ done(); setErr('Could not read image file.'); return; }
+            google.script.run
+              .withSuccessHandler(function(u){
+                if (!u || !u.ok){ done(); setErr((u && u.error)||'Logo upload failed.'); return; }
+                finalize(u.url);
+              })
+              .withFailureHandler(function(e){ done(); setErr((e && e.message)||'Logo upload failed.'); })
+              .api_uploadSponsorLogo(its, dataUrl, file.name);
+          });
         } else {
           finalize(null);
         }
@@ -3072,18 +3081,16 @@ if (saveBtn) saveBtn.onclick = (ev)=> saveProfile(!!edit, ev.currentTarget);
       }
     };
 
-    // Optional image upload step
+    // Optional image upload step — resize client-side before sending to stay under Cloudflare limit
     if (file){
       try{
-        const fr = new FileReader();
-        fr.onload = function(){
+        _resizeImageFile_(file, 800, function(dataUrl, err){
+          if (err){ done(); setErr('Could not read image.'); return; }
           google.script.run
             .withSuccessHandler(function(u){ finalize(u && u.url); })
             .withFailureHandler(function(e){ done(); setErr((e && e.message) || 'Upload failed'); })
-            .api_uploadProfilePic(fr.result, file.name, edit ? state.user.its : data.its);
-        };
-        fr.onerror = function(){ done(); setErr('Could not read image.'); };
-        fr.readAsDataURL(file);
+            .api_uploadProfilePic(dataUrl, file.name, edit ? state.user.its : data.its);
+        });
       } catch(_){
         done(); setErr('Could not read image.');
       }
