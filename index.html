@@ -1577,6 +1577,7 @@ function pageBalance(){
         '<button id="copyMemoBtn" class="btn btn--sm" style="margin-left:6px;padding:4px 8px;border-radius:8px;cursor:pointer;">Copy memo</button>'+
         '<br/><br/>'+
         '<a id="balRegisterBtn" href="https://mflt.meemjeem.com/#/event/EV-1779377563569" target="_blank" rel="noopener" class="btn" style="display:inline-flex;text-decoration:none;">Register</a>'+
+        '<button id="balRefundBtn" class="btn secondary" style="margin-left:8px">Refund</button>'+
       '</div>'+
       '<table class="table table--compact" style="margin-top:10px">'+
         '<thead><tr><th>Date</th><th>Event</th><th>Status</th><th class="right">Amount</th></tr></thead>'+
@@ -1590,6 +1591,25 @@ function pageBalance(){
   var balBox = $('#bal_box');
   balBox.querySelector('#copyEmailBtn').addEventListener('click', function(){ copyText(email, this); });
   balBox.querySelector('#copyMemoBtn').addEventListener('click',  function(){ copyText(memoText, this); });
+
+  balBox.querySelector('#balRefundBtn').addEventListener('click', function(){
+    var btn = this;
+    if (!confirm('Submit a Refund Request?\n\nA pending transaction will be created and reviewed by an admin.')) return;
+    btn.disabled = true;
+    var origText = btn.textContent;
+    btn.textContent = 'Submitting…';
+    google.script.run
+      .withSuccessHandler(function(r){
+        btn.disabled = false; btn.textContent = origText;
+        if (!r || !r.ok){ alert((r && r.error) || 'Refund request failed. Please try again.'); return; }
+        alert('Refund request submitted. An admin will review it shortly.');
+      })
+      .withFailureHandler(function(e){
+        btn.disabled = false; btn.textContent = origText;
+        alert((e && e.message) || 'Refund request failed. Please try again.');
+      })
+      .api_submitRefundRequest(state.user.its);
+  });
   balBox.querySelector('#downloadCsvBtn').addEventListener('click', function(){
     var btn = this, orig = btn.textContent;
     btn.disabled = true; btn.textContent = 'Preparing…';
