@@ -3620,6 +3620,8 @@ if (!isAdmin){
         '<div class="tiny" id="cap_err" style="color:var(--err)"></div>';
       root.appendChild(submitCard);
 
+      var selected = []; // tracks chosen players in order
+
       layout(root);
 
       /* ---- Wire everything ---- */
