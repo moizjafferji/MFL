@@ -500,6 +500,7 @@ var router = {
       ? ('?' + new URLSearchParams({ e: (opts.id || ''), k: (opts.token || '') }).toString()): '');
 
       case 'stat':            return '#/stat';                      // <-- NEW
+      case 'captains':        return '#/captains';
       case 'landing':
       default:                return '#/landing';
     }
@@ -515,7 +516,7 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','jersey','sponsor','landing','create','edit','stat'].includes(seg))
+    if (['home','profile','balance','calendar','jersey','sponsor','landing','create','edit','stat','captains'].includes(seg))
       return { page: seg };
 
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
@@ -841,6 +842,7 @@ function showLoading(text){
       navItem('Calendar','calendar', { test: ()=> !!state.user });
       navItem('Jersey','jersey',     { test: ()=> !!state.user });
       navItem('Sponsor','sponsor',   { test: ()=> !!state.user });
+      navItem('Captains','captains', { test: ()=> !!state.user });
 
       // Admin items (Events/Receipts/Stat Tracker)
 var hasAdminSports = (state.admin && state.admin.adminSports && state.admin.adminSports.length) ? true : false;
@@ -3520,6 +3522,236 @@ if (!isAdmin){
       layout(node);
     }
 
+    /* ===================== CAPTAINS ===================== */
+    function pageCaptains(){ if(!guard()) return;
+      showLoading('Loading rankings…');
+      google.script.run
+        .withSuccessHandler(function(res){
+          if (!res || !res.ok){ layout(el('<div class="card" style="color:var(--err)">Failed to load rankings: '+(res&&res.error||'')+'</div>')); return; }
+          _renderCaptainsPage(res);
+        })
+        .withFailureHandler(function(e){
+          layout(el('<div class="card" style="color:var(--err)">'+(e&&e.message||'Failed to load rankings.')+'</div>'));
+        })
+        .api_getRankings(state.user.its);
+    }
+
+    function _renderCaptainsPage(res){
+      // res.sections = [{ header: 'QBs', players: [{ its, name }, …] }, …]
+      // res.myVote = { its: submitterIts, picks: [{ its, name, tier }] } | null
+      var sections  = res.sections || [];
+      var myVote    = res.myVote   || null;
+
+      // If already voted, show read-only summary
+      if (myVote && myVote.picks && myVote.picks.length){
+        var root2 = document.createElement('div');
+        root2.className = 'stack';
+        var doneCard = document.createElement('div');
+        doneCard.className = 'card stack';
+        doneCard.innerHTML =
+          '<div style="font-size:var(--fs-md);font-weight:700;margin-bottom:6px">✓ Votes Submitted</div>'+
+          '<div class="muted" style="margin-bottom:12px">You have already submitted your votes. Contact an admin to make changes.</div>'+
+          '<div class="label">Your Selection</div>'+
+          '<div class="stack" style="gap:6px">'+
+          myVote.picks.map(function(p, i){
+            var color = p.tier===1 ? '#3b82f6' : '#f59e0b';
+            var label = p.tier===1 ? 'Top' : 'Bot';
+            return '<div style="display:flex;gap:8px;align-items:center;font-size:var(--fs-xs)">'+
+              '<span style="font-weight:700;color:'+color+';min-width:32px">'+(i+1)+'.</span>'+
+              '<span style="flex:1">'+_esc(p.name)+'</span>'+
+              '<span style="color:'+color+';font-weight:700">'+label+'</span>'+
+            '</div>';
+          }).join('')+
+          '</div>';
+        root2.appendChild(doneCard);
+        layout(root2);
+        return;
+      }
+
+      var root = document.createElement('div');
+      root.className = 'stack';
+
+      /* ---- Instructions card ---- */
+      var instrCard = document.createElement('div');
+      instrCard.className = 'card stack';
+      instrCard.innerHTML =
+        '<div style="font-size:var(--fs-md);font-weight:700;margin-bottom:6px">Captain Draft Voting</div>'+
+        '<div class="muted" style="line-height:1.6">'+
+          'Choose the <strong>16 Most Talented Players</strong>, including offensive and defensive skill whether they are QBs or WRs. '+
+          'However, evaluate each player\'s talent based on their designation as QB or WR. '+
+          '<br/><br/>'+
+          'The <strong>first 8 players</strong> you choose will be labeled <span style="color:#3b82f6;font-weight:700">Top</span> (top eight talents). '+
+          'The <strong>next 8</strong> will be labeled <span style="color:#f59e0b;font-weight:700">Bot</span> (bottom eight talents).'+
+        '</div>';
+      root.appendChild(instrCard);
+
+      /* ---- Selection counter card ---- */
+      var counterCard = document.createElement('div');
+      counterCard.className = 'card';
+      counterCard.id = 'cap_counter';
+      root.appendChild(counterCard);
+
+      /* ---- Player sections ---- */
+      sections.forEach(function(sec){
+        var secCard = document.createElement('div');
+        secCard.className = 'card stack';
+        secCard.innerHTML = '<div class="label" style="font-size:var(--fs-sm);font-weight:700">'+_esc(sec.header)+'</div>';
+
+        sec.players.forEach(function(player){
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)';
+          row.id = 'cap_row_'+player.its;
+          row.innerHTML =
+            '<div style="font-size:var(--fs-sm)">'+_esc(player.name)+'</div>'+
+            '<button class="btn secondary cap-pick-btn" data-its="'+player.its+'" data-name="'+_esc(player.name)+'" style="min-width:60px;padding:6px 12px;font-size:var(--fs-xs)">Pick</button>';
+          secCard.appendChild(row);
+        });
+
+        root.appendChild(secCard);
+      });
+
+      /* ---- Submit card ---- */
+      var submitCard = document.createElement('div');
+      submitCard.className = 'card stack';
+      submitCard.innerHTML =
+        '<div class="label">Your Selection (<span id="cap_sel_count">0</span>/16)</div>'+
+        '<div id="cap_sel_list" class="stack" style="gap:6px;margin-bottom:8px"></div>'+
+        '<button class="btn" id="cap_submit_btn" disabled>Submit Votes</button>'+
+        '<div class="tiny" id="cap_err" style="color:var(--err)"></div>';
+      root.appendChild(submitCard);
+
+      layout(root);
+
+      /* ---- Wire everything ---- */
+      function updateUI(){
+        // Counter
+        var counterEl = document.getElementById('cap_counter');
+        if (counterEl) counterEl.innerHTML =
+          '<span style="font-weight:700;font-size:var(--fs-sm)">'+selected.length+' / 16 selected</span>'+
+          (selected.length < 8 ? '<span class="muted" style="margin-left:8px">— next picks will be <span style="color:#3b82f6;font-weight:600">Top</span></span>' :
+           selected.length < 16 ? '<span class="muted" style="margin-left:8px">— next picks will be <span style="color:#f59e0b;font-weight:600">Bot</span></span>' :
+           '<span class="muted" style="margin-left:8px">— selection complete</span>');
+
+        // Selection count badge
+        var countEl = document.getElementById('cap_sel_count');
+        if (countEl) countEl.textContent = selected.length;
+
+        // Selection list
+        var listEl = document.getElementById('cap_sel_list');
+        if (listEl){
+          if (!selected.length){
+            listEl.innerHTML = '<div class="muted tiny">No players selected yet.</div>';
+          } else {
+            listEl.innerHTML = selected.map(function(p, i){
+              var tier = i < 8 ? 'Top' : 'Bot';
+              var color = i < 8 ? '#3b82f6' : '#f59e0b';
+              return '<div style="display:flex;align-items:center;gap:8px;font-size:var(--fs-xs)">'+
+                '<span style="font-weight:700;color:'+color+';min-width:32px">'+(i+1)+'.</span>'+
+                '<span style="flex:1">'+_esc(p.name)+'</span>'+
+                '<span style="color:'+color+';font-weight:700;min-width:32px">'+tier+'</span>'+
+                '<button class="btn danger" data-remove="'+p.its+'" style="padding:3px 8px;font-size:var(--fs-xxxs)">✕</button>'+
+              '</div>';
+            }).join('');
+
+            // Wire remove buttons
+            listEl.querySelectorAll('[data-remove]').forEach(function(rb){
+              rb.onclick = function(){
+                var its = rb.getAttribute('data-remove');
+                selected = selected.filter(function(p){ return p.its !== its; });
+                updateBtnForIts(its);
+                updateUI();
+              };
+            });
+          }
+        }
+
+        // Update all pick buttons
+        document.querySelectorAll('.cap-pick-btn').forEach(function(btn){
+          var its = btn.getAttribute('data-its');
+          updateBtnEl(btn, its);
+        });
+
+        // Submit button
+        var subBtn = document.getElementById('cap_submit_btn');
+        if (subBtn) subBtn.disabled = (selected.length !== 16);
+      }
+
+      function updateBtnForIts(its){
+        var btn = document.querySelector('.cap-pick-btn[data-its="'+its+'"]');
+        if (btn) updateBtnEl(btn, its);
+      }
+
+      function updateBtnEl(btn, its){
+        var idx = selected.findIndex(function(p){ return p.its === its; });
+        if (idx === -1){
+          // Not selected
+          btn.textContent = selected.length >= 16 ? '—' : 'Pick';
+          btn.disabled = selected.length >= 16;
+          btn.className = 'btn secondary cap-pick-btn';
+          btn.style.minWidth = '60px';
+          btn.style.padding = '6px 12px';
+          btn.style.fontSize = 'var(--fs-xs)';
+        } else {
+          var tier = idx < 8 ? 'Top' : 'Bot';
+          var color = idx < 8 ? '#3b82f6' : '#f59e0b';
+          btn.textContent = (idx+1)+'. '+tier;
+          btn.disabled = false;
+          btn.className = 'btn cap-pick-btn';
+          btn.style.background = color;
+          btn.style.borderColor = color;
+          btn.style.minWidth = '60px';
+          btn.style.padding = '6px 12px';
+          btn.style.fontSize = 'var(--fs-xs)';
+        }
+      }
+
+      // Apply prior vote if any
+      if (selected.length) updateUI();
+      else updateUI();
+
+      // Wire pick buttons
+      document.querySelectorAll('.cap-pick-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var its  = btn.getAttribute('data-its');
+          var name = btn.getAttribute('data-name');
+          var idx  = selected.findIndex(function(p){ return p.its === its; });
+          if (idx !== -1){
+            // Already selected — deselect
+            selected.splice(idx, 1);
+          } else {
+            if (selected.length >= 16) return;
+            selected.push({ its: its, name: name });
+          }
+          updateUI();
+        });
+      });
+
+      // Wire submit
+      var subBtn = document.getElementById('cap_submit_btn');
+      if (subBtn) subBtn.onclick = function(){
+        var errEl = document.getElementById('cap_err');
+        errEl.textContent = '';
+        if (selected.length !== 16){ errEl.textContent = 'Please select exactly 16 players.'; return; }
+
+        // Build payload: picks array with its + tier (1=top8, 2=bot8)
+        var picks = selected.map(function(p, i){
+          return { its: p.its, name: p.name, tier: i < 8 ? 1 : 2 };
+        });
+
+        withClickLock('captains:vote:'+state.user.its, subBtn, 'Submitting…', function(done){
+          google.script.run
+            .withSuccessHandler(function(r){
+              done();
+              if (!r || !r.ok){ errEl.textContent = (r&&r.error)||'Submit failed. Please try again.'; return; }
+              errEl.textContent = '';
+              alert('Votes submitted! Thank you.');
+            })
+            .withFailureHandler(function(e){ done(); errEl.textContent = (e&&e.message)||'Submit failed.'; })
+            .api_submitCaptainVotes(state.user.its, picks);
+        });
+      };
+    }
+
     /* ===================== ROUTER + RENDER ===================== */
     function render(){
       buildNav();
@@ -3541,6 +3773,7 @@ if (!isAdmin){
       if(state.page==='admin_ci') return pageAdminCI();
 
       if(state.page==='stat') return pageStat();
+      if(state.page==='captains') return pageCaptains();
       if(state.page==='qrcheck') return pageQrCheckin();
 
       if (state.page && state.page.startsWith('captain_')) {
