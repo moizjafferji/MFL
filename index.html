@@ -842,7 +842,7 @@ function showLoading(text){
       navItem('Calendar','calendar', { test: ()=> !!state.user });
       navItem('Jersey','jersey',     { test: ()=> !!state.user });
       navItem('Sponsor','sponsor',   { test: ()=> !!state.user });
-      navItem('Captains','captains', { test: ()=> !!state.user });
+      // navItem('Captains','captains', { test: ()=> !!state.user }); // HIDDEN — reactivate next season
 
       // Admin items (Events/Receipts/Stat Tracker)
 var hasAdminSports = (state.admin && state.admin.adminSports && state.admin.adminSports.length) ? true : false;
