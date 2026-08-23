@@ -3787,30 +3787,25 @@ if (!isAdmin){
 
       /* ---- Balances summary card ---- */
       var balCard = document.createElement('div');
-      balCard.className = 'card stack';
+      balCard.className = 'card';
       balCard.innerHTML =
-        '<div class="label" style="font-size:var(--fs-sm);font-weight:700">Captain Balances — Round '+round+'</div>'+
-        '<table class="table table--compact">'+
-          '<thead><tr><th>#</th><th>Captain</th><th>Balance</th></tr></thead>'+
-          '<tbody>'+
-          balances.map(function(b, i){
-            var isSelf = b.name === captainName;
-            return '<tr'+(isSelf?' style="background:rgba(59,130,246,.08)"':'')+'>'+
-              '<td>'+(i+1)+'</td>'+
-              '<td>'+(isSelf?'<strong>':'')+_esc(b.name)+(isSelf?'</strong>':'')+
-                (isSelf?' <span class="badge ok">You</span>':'')+
-              '</td>'+
-              '<td style="font-weight:'+(isSelf?'800':'400')+'">$'+Number(b.balance||0).toFixed(2)+'</td>'+
-            '</tr>';
-          }).join('')+
-          '</tbody>'+
-        '</table>';
+        '<div class="label" style="margin-bottom:6px">Balances — R'+round+'</div>'+
+        '<div style="display:flex;flex-wrap:wrap;gap:6px 16px">'+
+        balances.map(function(b){
+          var isSelf = b.name === captainName;
+          var color  = isSelf ? '#3b82f6' : 'var(--muted)';
+          return '<span style="font-size:var(--fs-xs);color:'+color+';font-weight:'+(isSelf?'700':'400')+'">'+
+            _esc(b.name)+': <strong>$'+Number(b.balance||0).toFixed(0)+'</strong>'+
+          '</span>';
+        }).join('')+
+        '</div>';
       root.appendChild(balCard);
 
       /* ---- My bids card ---- */
       var bidsCard = document.createElement('div');
       bidsCard.className = 'card stack';
       bidsCard.id = 'bid_my_card';
+      var maxBids = 198;
 
       function renderMyBids(){
         var used = myBids.length;
@@ -3856,7 +3851,7 @@ if (!isAdmin){
               '<button class="btn" id="bid_add_btn">Add Bid</button>'+
             '</div>'+
             '<div class="tiny" id="bid_err" style="color:var(--err)"></div>'
-          : '<div class="tiny muted" style="margin-top:4px">Maximum of 16 bids reached.</div>');
+          : '<div class="tiny muted" style="margin-top:4px">Maximum of 198 bids reached.</div>');
 
         /* Wire delete buttons */
         bidsCard.querySelectorAll('.bid-del-btn').forEach(function(btn){
@@ -3914,6 +3909,7 @@ if (!isAdmin){
               var errEl  = modal.querySelector('#edit_err');
               errEl.textContent = '';
               if (!amt||amt<=0){ errEl.textContent='Enter a valid amount.'; return; }
+              if (amt>198)     { errEl.textContent='Maximum bid amount is $198.'; return; }
               if (!player){ errEl.textContent='Choose a player.'; return; }
               var saveBtn = modal.querySelector('#edit_save');
               saveBtn.disabled=true; saveBtn.textContent='Saving…';
@@ -3932,27 +3928,31 @@ if (!isAdmin){
         });
 
         /* Wire add button */
-        var addBtn = document.getElementById('bid_add_btn');
-        if (addBtn) addBtn.onclick = function(){
-          var amt    = Number((document.getElementById('bid_amt')||{}).value||0);
-          var player = (document.getElementById('bid_player')||{}).value||'';
-          var errEl  = document.getElementById('bid_err');
-          if (errEl) errEl.textContent='';
-          if (!amt||amt<=0){ if(errEl) errEl.textContent='Enter a valid amount.'; return; }
-          if (!player){ if(errEl) errEl.textContent='Choose a player.'; return; }
-          addBtn.disabled=true; addBtn.textContent='Adding…';
-          google.script.run
-            .withSuccessHandler(function(r){
-              addBtn.disabled=false; addBtn.textContent='Add Bid';
-              if (!r||!r.ok){ if(errEl) errEl.textContent=(r&&r.error)||'Failed to add bid.'; return; }
-              myBids.push({ slot: r.slot, amount: amt, player: player });
-              renderMyBids();
-            })
-            .withFailureHandler(function(e){
-              addBtn.disabled=false; addBtn.textContent='Add Bid';
-              if(errEl) errEl.textContent=(e&&e.message)||'Failed to add bid.';
-            })
-            .api_addBid(state.user.its, amt, player, round);
+        /* Wire add button — use event delegation on bidsCard since innerHTML recreates DOM */
+        bidsCard.onclick = function(e){
+          if (e.target && e.target.id === 'bid_add_btn'){
+            var amt    = Number((document.getElementById('bid_amt')||{}).value||0);
+            var player = (document.getElementById('bid_player')||{}).value||'';
+            var errEl  = document.getElementById('bid_err');
+            if (errEl) errEl.textContent='';
+            if (!amt||amt<=0)  { if(errEl) errEl.textContent='Enter a valid amount.'; return; }
+            if (amt>198)       { if(errEl) errEl.textContent='Maximum bid amount is $198.'; return; }
+            if (!player)       { if(errEl) errEl.textContent='Choose a player.'; return; }
+            var addBtn = e.target;
+            addBtn.disabled=true; addBtn.textContent='Adding…';
+            google.script.run
+              .withSuccessHandler(function(r){
+                addBtn.disabled=false; addBtn.textContent='Add Bid';
+                if (!r||!r.ok){ if(errEl) errEl.textContent=(r&&r.error)||'Failed to add bid.'; return; }
+                myBids.push({ slot: r.slot, amount: amt, player: player });
+                renderMyBids();
+              })
+              .withFailureHandler(function(e){
+                addBtn.disabled=false; addBtn.textContent='Add Bid';
+                if(errEl) errEl.textContent=(e&&e.message)||'Failed to add bid.';
+              })
+              .api_addBid(state.user.its, amt, player, round);
+          }
         };
       }
 
