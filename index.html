@@ -503,6 +503,7 @@ var router = {
       case 'stat':            return '#/stat';                      // <-- NEW
       case 'captains':        return '#/captains';
       case 'bid':             return '#/bid';
+      case 'info':             return '#/info';
       case 'landing':
       default:                return '#/landing';
     }
@@ -518,7 +519,7 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','jersey','sponsor','landing','create','edit','stat','captains','bid'].includes(seg))
+    if (['home','profile','balance','calendar','jersey','sponsor','landing','create','edit','stat','captains','bid','info'].includes(seg))
       return { page: seg };
 
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
@@ -3790,7 +3791,10 @@ if (!isAdmin){
       var balCard = document.createElement('div');
       balCard.className = 'card';
       balCard.innerHTML =
-        '<div class="label" style="margin-bottom:6px">Balances — R'+round+'</div>'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
+          '<div class="label">Balances — R'+round+'</div>'+
+          '<button class="btn secondary" id="bid_info_btn">Player Info →</button>'+
+        '</div>'+
         '<div style="display:flex;flex-wrap:wrap;gap:6px 16px">'+
         balances.map(function(b){
           var isSelf = b.name === captainName;
@@ -3801,6 +3805,8 @@ if (!isAdmin){
         }).join('')+
         '</div>';
       root.appendChild(balCard);
+      var bidInfoBtn = balCard.querySelector('#bid_info_btn');
+      if (bidInfoBtn) bidInfoBtn.onclick = function(){ router.navigate('info'); };
 
       /* ---- My bids card ---- */
       var bidsCard = document.createElement('div');
@@ -3962,6 +3968,125 @@ if (!isAdmin){
       layout(root);
     }
 
+    /* ===================== CAPTAIN INFO (hidden — Bid captains only) ===================== */
+    var _infoState = { players: [], search: '', avail: 'all' };
+
+    function pageInfo(){ if(!guard()) return;
+      showLoading('Loading player info…');
+      google.script.run
+        .withSuccessHandler(function(res){
+          if (!res || !res.ok){
+            layout(el('<div class="card" style="color:var(--err)">'+(res&&res.error||'Access denied or failed to load.')+'</div>'));
+            return;
+          }
+          _infoState.players = res.players || [];
+          _infoState.search = '';
+          _infoState.avail = 'all';
+          _renderInfoPage();
+        })
+        .withFailureHandler(function(e){
+          layout(el('<div class="card" style="color:var(--err)">'+(e&&e.message||'Failed to load player info.')+'</div>'));
+        })
+        .api_getCaptainInfoData(state.user.its);
+    }
+
+    function _renderInfoPage(){
+      var root = document.createElement('div');
+      root.className = 'stack';
+
+      var header = document.createElement('div');
+      header.className = 'card stack';
+      header.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+          '<div class="label" style="font-size:var(--fs-md);font-weight:800">Registered Players</div>'+
+          '<button class="btn secondary" id="info_back_btn">← Back to Bid Room</button>'+
+        '</div>'+
+        '<div class="row" style="align-items:flex-end">'+
+          '<div class="col" style="min-width:200px">'+
+            '<label class="label">Search (name or Jamaat)</label>'+
+            '<input id="info_search" class="input" placeholder="Search…" value="'+_esc(_infoState.search)+'">'+
+          '</div>'+
+          '<div class="col" style="min-width:160px;max-width:220px">'+
+            '<label class="label">Availability</label>'+
+            '<select id="info_avail" class="input">'+
+              '<option value="all"'+(_infoState.avail==='all'?' selected':'')+'>All</option>'+
+              '<option value="available"'+(_infoState.avail==='available'?' selected':'')+'>Available Only</option>'+
+              '<option value="drafted"'+(_infoState.avail==='drafted'?' selected':'')+'>Drafted / Unavailable</option>'+
+            '</select>'+
+          '</div>'+
+        '</div>';
+      root.appendChild(header);
+
+      var listCard = document.createElement('div');
+      listCard.className = 'card stack';
+      listCard.id = 'info_list_card';
+      root.appendChild(listCard);
+
+      layout(root);
+
+      var backBtn = document.getElementById('info_back_btn');
+      if (backBtn) backBtn.onclick = function(){ router.navigate('bid'); };
+
+      var searchEl = document.getElementById('info_search');
+      if (searchEl) searchEl.addEventListener('input', function(){
+        _infoState.search = this.value || '';
+        _renderInfoList();
+      });
+
+      var availEl = document.getElementById('info_avail');
+      if (availEl) availEl.addEventListener('change', function(){
+        _infoState.avail = this.value || 'all';
+        _renderInfoList();
+      });
+
+      _renderInfoList();
+    }
+
+    function _renderInfoList(){
+      var box = document.getElementById('info_list_card');
+      if (!box) return;
+
+      var q = (_infoState.search||'').trim().toLowerCase();
+      var list = _infoState.players.filter(function(p){
+        if (_infoState.avail === 'available' && !p.available) return false;
+        if (_infoState.avail === 'drafted' && p.available) return false;
+        if (q){
+          var hay = (String(p.name||'')+' '+String(p.jamaat||'')).toLowerCase();
+          if (hay.indexOf(q) === -1) return false;
+        }
+        return true;
+      });
+
+      if (!list.length){
+        box.innerHTML = '<div class="muted">No players match.</div>';
+        return;
+      }
+
+      box.innerHTML =
+        '<div class="tiny muted" style="margin-bottom:4px">Showing '+list.length+' of '+_infoState.players.length+' players</div>'+
+        list.map(function(p){
+          var picHtml = p.picture
+            ? '<img src="'+_esc(p.picture)+'" alt="" style="width:44px;height:44px;border-radius:8px;object-fit:cover;background:var(--surface);flex:0 0 auto" onerror="this.style.display=\'none\'">'
+            : '<div style="width:44px;height:44px;border-radius:8px;background:var(--surface);flex:0 0 auto"></div>';
+          var badge = p.available
+            ? '<span class="badge ok">Available</span>'
+            : '<span class="badge warn">Drafted</span>';
+          var rankHtml = (p.rank!==''&&p.rank!=null) ? (' <span class="tiny muted">(Rank '+_esc(String(p.rank))+')</span>') : '';
+          return '<div style="display:flex;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">'+
+            picHtml+
+            '<div style="flex:1 1 180px;min-width:180px">'+
+              '<div style="font-weight:700">'+_esc(p.name||'')+rankHtml+'</div>'+
+              '<div class="tiny muted">'+_esc(p.jamaat||'—')+'</div>'+
+            '</div>'+
+            '<div class="tiny" style="min-width:100px">'+_esc(p.height||'—')+'</div>'+
+            '<div class="tiny" style="min-width:80px">'+(p.weight? (_esc(String(p.weight))+' lb') : '—')+'</div>'+
+            '<div class="tiny" style="min-width:60px">'+((p.age!==''&&p.age!=null)? _esc(String(p.age)) : '—')+'</div>'+
+            '<div class="tiny" style="min-width:120px">'+_esc(p.whatsapp||'—')+'</div>'+
+            '<div>'+badge+'</div>'+
+          '</div>';
+        }).join('');
+    }
+
     /* ===================== ROUTER + RENDER ===================== */
     function render(){
       buildNav();
@@ -3985,6 +4110,7 @@ if (!isAdmin){
       if(state.page==='stat') return pageStat();
       if(state.page==='captains') return pageCaptains();
       if(state.page==='bid')      return pageBid();
+      if(state.page==='info')     return pageInfo();
       if(state.page==='qrcheck') return pageQrCheckin();
 
       if (state.page && state.page.startsWith('captain_')) {
