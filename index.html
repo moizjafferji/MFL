@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html>
-  
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -3970,7 +3969,7 @@ if (!isAdmin){
     }
 
     /* ===================== CAPTAIN INFO (hidden — Bid captains only) ===================== */
-    var _infoState = { players: [], search: '', avail: 'all' };
+    var _infoState = { players: [], search: '', avail: 'all', position: 'all', sort: 'tier', dir: 'asc' };
 
     function pageInfo(){ if(!guard()) return;
       showLoading('Loading player info…');
@@ -3983,6 +3982,9 @@ if (!isAdmin){
           _infoState.players = res.players || [];
           _infoState.search = '';
           _infoState.avail = 'all';
+          _infoState.position = 'all';
+          _infoState.sort = 'tier';
+          _infoState.dir = 'asc';
           _renderInfoPage();
         })
         .withFailureHandler(function(e){
@@ -3990,6 +3992,13 @@ if (!isAdmin){
         })
         .api_getCaptainInfoData(state.user.its);
     }
+
+    var INFO_SORT_OPTIONS = [
+      { value:'tier',   label:'Tier' },
+      { value:'name',   label:'Name' },
+      { value:'height', label:'Height' },
+      { value:'age',    label:'Age' }
+    ];
 
     function _renderInfoPage(){
       var root = document.createElement('div');
@@ -4013,6 +4022,29 @@ if (!isAdmin){
               '<option value="all"'+(_infoState.avail==='all'?' selected':'')+'>All</option>'+
               '<option value="available"'+(_infoState.avail==='available'?' selected':'')+'>Available Only</option>'+
               '<option value="drafted"'+(_infoState.avail==='drafted'?' selected':'')+'>Drafted / Unavailable</option>'+
+            '</select>'+
+          '</div>'+
+          '<div class="col" style="min-width:150px;max-width:200px">'+
+            '<label class="label">Position</label>'+
+            '<select id="info_position" class="input">'+
+              '<option value="all"'+(_infoState.position==='all'?' selected':'')+'>All</option>'+
+              '<option value="qb"'+(_infoState.position==='qb'?' selected':'')+'>QBs Only</option>'+
+              '<option value="nonqb"'+(_infoState.position==='nonqb'?' selected':'')+'>Non-QBs Only</option>'+
+            '</select>'+
+          '</div>'+
+          '<div class="col" style="min-width:140px;max-width:180px">'+
+            '<label class="label">Sort By</label>'+
+            '<select id="info_sort" class="input">'+
+              INFO_SORT_OPTIONS.map(function(o){
+                return '<option value="'+o.value+'"'+(_infoState.sort===o.value?' selected':'')+'>'+o.label+'</option>';
+              }).join('')+
+            '</select>'+
+          '</div>'+
+          '<div class="col" style="min-width:110px;max-width:130px">'+
+            '<label class="label">Order</label>'+
+            '<select id="info_dir" class="input">'+
+              '<option value="asc"'+(_infoState.dir==='asc'?' selected':'')+'>Ascending</option>'+
+              '<option value="desc"'+(_infoState.dir==='desc'?' selected':'')+'>Descending</option>'+
             '</select>'+
           '</div>'+
         '</div>';
@@ -4040,7 +4072,65 @@ if (!isAdmin){
         _renderInfoList();
       });
 
+      var positionEl = document.getElementById('info_position');
+      if (positionEl) positionEl.addEventListener('change', function(){
+        _infoState.position = this.value || 'all';
+        _renderInfoList();
+      });
+
+      var sortEl = document.getElementById('info_sort');
+      if (sortEl) sortEl.addEventListener('change', function(){
+        _infoState.sort = this.value || 'tier';
+        _renderInfoList();
+      });
+
+      var dirEl = document.getElementById('info_dir');
+      if (dirEl) dirEl.addEventListener('change', function(){
+        _infoState.dir = this.value || 'asc';
+        _renderInfoList();
+      });
+
       _renderInfoList();
+    }
+
+    /* Convert a height string like "5ft 10in" back to total inches for sorting.
+       Falls back to 0 (sorts to one end) when unparsable. */
+    function _infoHeightToInches_(h){
+      if (!h) return null;
+      var m = String(h).match(/(\d+)\s*ft\s*(\d+)\s*in/i);
+      if (!m) return null;
+      return (Number(m[1])||0)*12 + (Number(m[2])||0);
+    }
+
+    function _infoCompare_(a, b, sortKey){
+      if (sortKey === 'name'){
+        return String(a.name||'').localeCompare(String(b.name||''));
+      }
+      if (sortKey === 'height'){
+        var ha = _infoHeightToInches_(a.height), hb = _infoHeightToInches_(b.height);
+        var va = ha!=null, vb = hb!=null;
+        if (va && vb) return ha - hb;
+        if (va) return -1;
+        if (vb) return 1;
+        return 0;
+      }
+      if (sortKey === 'age'){
+        var aa = (a.age!==''&&a.age!=null) ? Number(a.age) : null;
+        var ab = (b.age!==''&&b.age!=null) ? Number(b.age) : null;
+        var vaa = aa!=null, vab = ab!=null;
+        if (vaa && vab) return aa - ab;
+        if (vaa) return -1;
+        if (vab) return 1;
+        return 0;
+      }
+      // default: tier
+      var ta = (a.tier!==''&&a.tier!=null) ? Number(a.tier) : null;
+      var tb = (b.tier!==''&&b.tier!=null) ? Number(b.tier) : null;
+      var vta = ta!=null && isFinite(ta), vtb = tb!=null && isFinite(tb);
+      if (vta && vtb) return ta - tb;
+      if (vta) return -1;
+      if (vtb) return 1;
+      return String(a.name||'').localeCompare(String(b.name||''));
     }
 
     function _renderInfoList(){
@@ -4051,11 +4141,18 @@ if (!isAdmin){
       var list = _infoState.players.filter(function(p){
         if (_infoState.avail === 'available' && !p.available) return false;
         if (_infoState.avail === 'drafted' && p.available) return false;
+        if (_infoState.position === 'qb' && !p.isQB) return false;
+        if (_infoState.position === 'nonqb' && p.isQB) return false;
         if (q){
           var hay = (String(p.name||'')+' '+String(p.jamaat||'')).toLowerCase();
           if (hay.indexOf(q) === -1) return false;
         }
         return true;
+      });
+
+      list.sort(function(a,b){
+        var c = _infoCompare_(a, b, _infoState.sort);
+        return _infoState.dir === 'desc' ? -c : c;
       });
 
       if (!list.length){
@@ -4065,27 +4162,45 @@ if (!isAdmin){
 
       box.innerHTML =
         '<div class="tiny muted" style="margin-bottom:4px">Showing '+list.length+' of '+_infoState.players.length+' players</div>'+
-        list.map(function(p){
-          var picHtml = p.picture
-            ? '<img src="'+_esc(p.picture)+'" alt="" style="width:44px;height:44px;border-radius:8px;object-fit:cover;background:var(--surface);flex:0 0 auto" onerror="this.style.display=\'none\'">'
-            : '<div style="width:44px;height:44px;border-radius:8px;background:var(--surface);flex:0 0 auto"></div>';
-          var badge = p.available
-            ? '<span class="badge ok">Available</span>'
-            : '<span class="badge warn">Drafted</span>';
-          var rankHtml = (p.rank!==''&&p.rank!=null) ? (' <span class="tiny muted">(Rank '+_esc(String(p.rank))+')</span>') : '';
-          return '<div style="display:flex;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">'+
-            picHtml+
-            '<div style="flex:1 1 180px;min-width:180px">'+
-              '<div style="font-weight:700">'+_esc(p.name||'')+rankHtml+'</div>'+
-              '<div class="tiny muted">'+_esc(p.jamaat||'—')+'</div>'+
-            '</div>'+
-            '<div class="tiny" style="min-width:100px">'+_esc(p.height||'—')+'</div>'+
-            '<div class="tiny" style="min-width:80px">'+(p.weight? (_esc(String(p.weight))+' lb') : '—')+'</div>'+
-            '<div class="tiny" style="min-width:60px">'+((p.age!==''&&p.age!=null)? _esc(String(p.age)) : '—')+'</div>'+
-            '<div class="tiny" style="min-width:120px">'+_esc(p.whatsapp||'—')+'</div>'+
-            '<div>'+badge+'</div>'+
-          '</div>';
-        }).join('');
+        '<table class="table table--compact">'+
+          '<thead><tr>'+
+            '<th>Picture</th>'+
+            '<th>Name</th>'+
+            '<th>Tier</th>'+
+            '<th>Jamaat</th>'+
+            '<th>Height</th>'+
+            '<th>Weight</th>'+
+            '<th>Age</th>'+
+            '<th>Whatsapp</th>'+
+            '<th>Position</th>'+
+            '<th>Status</th>'+
+          '</tr></thead>'+
+          '<tbody>'+
+          list.map(function(p){
+            var picHtml = p.picture
+              ? '<img src="'+_esc(p.picture)+'" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--surface)" onerror="this.style.display=\'none\'">'
+              : '<div style="width:40px;height:40px;border-radius:8px;background:var(--surface)"></div>';
+            var badge = p.available
+              ? '<span class="badge ok">Available</span>'
+              : '<span class="badge warn">Drafted</span>';
+            var qbBadge = p.isQB
+              ? '<span class="badge" style="background:rgba(59,130,246,.15);color:#93c5fd;border-color:rgba(59,130,246,.35)">QB</span>'
+              : '<span class="badge" style="background:rgba(159,179,200,.12);color:var(--muted);border-color:rgba(159,179,200,.3)">Non-QB</span>';
+            return '<tr>'+
+              '<td>'+picHtml+'</td>'+
+              '<td style="font-weight:700">'+_esc(p.name||'')+'</td>'+
+              '<td>'+((p.tier!==''&&p.tier!=null)? _esc(String(p.tier)) : '—')+'</td>'+
+              '<td>'+_esc(p.jamaat||'—')+'</td>'+
+              '<td>'+_esc(p.height||'—')+'</td>'+
+              '<td>'+(p.weight? (_esc(String(p.weight))+' lb') : '—')+'</td>'+
+              '<td>'+((p.age!==''&&p.age!=null)? _esc(String(p.age)) : '—')+'</td>'+
+              '<td>'+_esc(p.whatsapp||'—')+'</td>'+
+              '<td>'+qbBadge+'</td>'+
+              '<td>'+badge+'</td>'+
+            '</tr>';
+          }).join('')+
+          '</tbody>'+
+        '</table>';
     }
 
     /* ===================== ROUTER + RENDER ===================== */
