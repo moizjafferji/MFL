@@ -4029,7 +4029,7 @@ if (!isAdmin){
             '<select id="info_position" class="input">'+
               '<option value="all"'+(_infoState.position==='all'?' selected':'')+'>All</option>'+
               '<option value="qb"'+(_infoState.position==='qb'?' selected':'')+'>QBs Only</option>'+
-              '<option value="nonqb"'+(_infoState.position==='nonqb'?' selected':'')+'>Non-QBs Only</option>'+
+              '<option value="nonqb"'+(_infoState.position==='nonqb'?' selected':'')+'>WRs Only</option>'+
             '</select>'+
           '</div>'+
           '<div class="col" style="min-width:140px;max-width:180px">'+
@@ -4185,7 +4185,7 @@ if (!isAdmin){
               : '<span class="badge warn">Drafted</span>';
             var qbBadge = p.isQB
               ? '<span class="badge" style="background:rgba(59,130,246,.15);color:#93c5fd;border-color:rgba(59,130,246,.35)">QB</span>'
-              : '<span class="badge" style="background:rgba(159,179,200,.12);color:var(--muted);border-color:rgba(159,179,200,.3)">Non-QB</span>';
+              : '<span class="badge" style="background:rgba(159,179,200,.12);color:var(--muted);border-color:rgba(159,179,200,.3)">WR</span>';
             return '<tr>'+
               '<td>'+picHtml+'</td>'+
               '<td style="font-weight:700">'+_esc(p.name||'')+'</td>'+
