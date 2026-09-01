@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-  
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MFL</title>
@@ -487,7 +486,6 @@ var router = {
       case 'profile':         return '#/profile';
       case 'balance':         return '#/balance';
       case 'calendar':        return '#/calendar';
-      case 'teams':           return '#/teams';
       case 'jersey':          return '#/jersey';
       case 'sponsor':         return '#/sponsor';
       case 'guests':          return '#/guests';
@@ -521,7 +519,7 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info'].includes(seg))
+    if (['home','profile','balance','calendar','jersey','sponsor','landing','create','edit','stat','captains','bid','info'].includes(seg))
       return { page: seg };
 
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
@@ -845,7 +843,6 @@ function showLoading(text){
       navItem('Profile','profile', { test: ()=> !!state.user });
       navItem('Balance','balance', { test: ()=> !!state.user });
       navItem('Calendar','calendar', { test: ()=> !!state.user });
-      navItem('Teams','teams',       { test: ()=> !!state.user });
       navItem('Jersey','jersey',     { test: ()=> !!state.user });
       navItem('Sponsor','sponsor',   { test: ()=> !!state.user });
       // navItem('Captains','captains', { test: ()=> !!state.user }); // HIDDEN — reactivate next season
@@ -1726,89 +1723,6 @@ function pageBalance(){
         '</div>'
       );
       layout(node);
-    }
-
-    /* ===================== TEAMS ===================== */
-    function pageTeams(){ if(!guard())return;
-      showLoading('Loading teams…');
-      google.script.run
-        .withSuccessHandler(function(res){
-          if (!res || !res.ok){ layout(el('<div class="card" style="color:var(--err)">Failed to load teams.</div>')); return; }
-          _renderTeamsPage(res.teams||[]);
-        })
-        .withFailureHandler(function(e){
-          layout(el('<div class="card" style="color:var(--err)">'+(e&&e.message||'Failed to load teams.')+'</div>'));
-        })
-        .api_getTeams();
-    }
-
-    function _renderTeamsPage(teams){
-      state.tmp = state.tmp || {};
-      var selectedTeam = state.tmp.teams_filter || '';
-
-      var root = document.createElement('div');
-      root.className = 'stack';
-
-      var filterCard = document.createElement('div');
-      filterCard.className = 'card stack';
-      filterCard.innerHTML =
-        '<div class="label">Filter by Team</div>'+
-        '<select id="teams_filter" class="input">'+
-          '<option value="">All Teams</option>'+
-          teams.map(function(t){
-            return '<option value="'+_esc(t.name)+'"'+(selectedTeam===t.name?' selected':'')+'>'+_esc(t.name)+'</option>';
-          }).join('')+
-        '</select>';
-      root.appendChild(filterCard);
-
-      var listWrap = document.createElement('div');
-      listWrap.className = 'stack';
-      listWrap.id = 'teams_list';
-      root.appendChild(listWrap);
-
-      layout(root);
-
-      function renderList(){
-        var filter = document.getElementById('teams_filter').value;
-        state.tmp.teams_filter = filter;
-        var box = document.getElementById('teams_list');
-        var toShow = filter ? teams.filter(function(t){ return t.name===filter; }) : teams;
-
-        box.innerHTML = toShow.map(function(t){
-          var hex = t.hex || '#334155';
-          var rosterHtml = (t.roster||[]).map(function(p){
-            return '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,.08);display:flex;gap:8px">'+
-              '<div style="min-width:36px;font-weight:700;opacity:.8">'+_esc(p.number||'')+'</div>'+
-              '<div>'+_esc(p.name||'')+'</div>'+
-            '</div>';
-          }).join('') || '<div class="muted tiny">No roster listed</div>';
-
-          var sponsorHtml = t.sponsor
-            ? ('<div class="tiny"><b>Sponsor:</b> '+_esc(t.sponsor)+'</div>')
-            : '<div class="tiny muted">Sponsor: —</div>';
-
-          var captainHtml = (t.captain && t.captain.name)
-            ? (_esc(t.captain.number||'')+' '+_esc(t.captain.name))
-            : '—';
-
-          return '<div class="card stack" style="border-left:6px solid '+_esc(hex)+'">'+
-            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
-              '<div style="display:flex;align-items:center;gap:10px">'+
-                '<div style="width:18px;height:18px;border-radius:50%;background:'+_esc(hex)+';border:1px solid rgba(255,255,255,.25)"></div>'+
-                '<div style="font-size:var(--fs-lg);font-weight:800">'+_esc(t.name)+'</div>'+
-              '</div>'+
-              '<div class="tiny muted">'+_esc(t.colorName||'')+'</div>'+
-            '</div>'+
-            sponsorHtml+
-            '<div class="tiny"><b>Captain:</b> '+captainHtml+'</div>'+
-            '<div class="label" style="margin-top:6px">Roster</div>'+
-            '<div>'+rosterHtml+'</div>'+
-          '</div>';
-        }).join('') || '<div class="card muted">No teams found.</div>';
-      }
-
-      document.getElementById('teams_filter').addEventListener('change', renderList);
-      renderList();
     }
 
     /* ===================== JERSEY ===================== */
@@ -4301,7 +4215,6 @@ if (!isAdmin){
       if(state.page==='profile') return pageProfile();
       if(state.page==='balance') return pageBalance();
       if(state.page==='calendar') return pageCalendar();
-      if(state.page==='teams')    return pageTeams();
       if(state.page==='jersey')   return pageJersey();
       if(state.page==='sponsor')  return pageSponsor();
       if(state.page==='guests') return pageGuests();
