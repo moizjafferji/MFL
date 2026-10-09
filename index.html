@@ -1714,6 +1714,7 @@ function pageBalance(){
       }).join('');
       purchaseCard.innerHTML =
         '<div class="label">Purchase a Shirt</div>'+
+                '<div class="muted">You must first add funds to your balance (instructions on Balance page), then choose the shirt you want to purchase. You will then be prompted to add shirt name and number information.</div>';
         '<div class="stack" style="gap:8px">'+btnRows+'</div>'+
         '<div class="tiny" id="jr_buy_err" style="color:var(--err);margin-top:4px"></div>';
       root.appendChild(purchaseCard);
@@ -1727,7 +1728,6 @@ function pageBalance(){
           'style="width:100%;max-width:720px;height:auto;border-radius:12px;display:block;margin:0 auto" '+
           'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'" />'+
         '<a href="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjcEnJ4EUCAq0c6vHmcJWS4hU4h1ABBZ04K0LKy52r2Dh3v8UEabzWydY7xLv9rFQGkrDo2fCF4a7CCnTSOrP3usuNi2NQJiACGKriZlF-s7hy-LKxNV7wsFG4tmF1W3EtwzTkl9_vMNOvodNYS3PrajTRM8uo_N9vx5ISgDLC-AMw7OByYbNFCIpYREHFi/s2000/Cotton%20shirt.png" target="_blank" rel="noopener" style="display:none">View previous years shirt designs</a>'+
-        '<div class="muted">You must first add funds to your balance (instructions on Balance page), then choose the shirt you want to purchase. You will then be prompted to add shirt name and number information.</div>';
       root.appendChild(refCard);
 
       /* ---- Purchased shirt config cards (persistent) ---- */
