@@ -16,7 +16,6 @@
 <style>
   :root{
     /* Colors */
-    
     --bg:#0b1220; --surface:#0f172a; --card:#0e1626; --muted:#9fb3c8; --text:#e6eef8;
     --accent:#3b82f6; --ok:#16a34a; --warn:#f59e0b; --err:#ef4444; --border:#223;
 
@@ -486,7 +485,6 @@ var router = {
       case 'profile':         return '#/profile';
       case 'balance':         return '#/balance';
       case 'calendar':        return '#/calendar';
-      case 'teams':           return '#/teams';
       case 'jersey':          return '#/jersey';
       case 'sponsor':         return '#/sponsor';
       case 'guests':          return '#/guests';
@@ -502,9 +500,6 @@ var router = {
       ? ('?' + new URLSearchParams({ e: (opts.id || ''), k: (opts.token || '') }).toString()): '');
 
       case 'stat':            return '#/stat';                      // <-- NEW
-      case 'captains':        return '#/captains';
-      case 'bid':             return '#/bid';
-      case 'info':             return '#/info';
       case 'landing':
       default:                return '#/landing';
     }
@@ -520,7 +515,7 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info'].includes(seg))
+    if (['home','profile','balance','calendar','jersey','sponsor','landing','create','edit','stat'].includes(seg))
       return { page: seg };
 
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
@@ -844,10 +839,8 @@ function showLoading(text){
       navItem('Profile','profile', { test: ()=> !!state.user });
       navItem('Balance','balance', { test: ()=> !!state.user });
       navItem('Calendar','calendar', { test: ()=> !!state.user });
-      navItem('Teams','teams',       { test: ()=> !!state.user });
       navItem('Jersey','jersey',     { test: ()=> !!state.user });
       navItem('Sponsor','sponsor',   { test: ()=> !!state.user });
-      // navItem('Captains','captains', { test: ()=> !!state.user }); // HIDDEN — reactivate next season
 
       // Admin items (Events/Receipts/Stat Tracker)
 var hasAdminSports = (state.admin && state.admin.adminSports && state.admin.adminSports.length) ? true : false;
@@ -1582,9 +1575,9 @@ function pageBalance(){
         'MUST WRITE THIS EXACTLY IN MEMO:<br/>'+
         '<span style="font-weight:600">'+memoText+'</span> '+
         '<button id="copyMemoBtn" class="btn btn--sm" style="margin-left:6px;padding:4px 8px;border-radius:8px;cursor:pointer;">Copy memo</button>'+
-        '<br/><br/>'+
+        '<br/><div class="tiny muted" style="margin-top:6px">Please allow up to 15 minutes for balance to update.</div>'+
+        '<br/>'+
         '<a id="balRegisterBtn" href="https://mflt.meemjeem.com/#/event/EV-1779377563569" target="_blank" rel="noopener" class="btn" style="display:inline-flex;text-decoration:none;">Register</a>'+
-        '<button id="balRefundBtn" class="btn secondary" style="margin-left:8px">Refund</button>'+
       '</div>'+
       '<table class="table table--compact" style="margin-top:10px">'+
         '<thead><tr><th>Date</th><th>Event</th><th>Status</th><th class="right">Amount</th></tr></thead>'+
@@ -1598,70 +1591,6 @@ function pageBalance(){
   var balBox = $('#bal_box');
   balBox.querySelector('#copyEmailBtn').addEventListener('click', function(){ copyText(email, this); });
   balBox.querySelector('#copyMemoBtn').addEventListener('click',  function(){ copyText(memoText, this); });
-
-  balBox.querySelector('#balRefundBtn').addEventListener('click', function(){
-    var btn = this;
-
-    // Build modal
-    var modal = document.createElement('div');
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
-    modal.innerHTML =
-      '<div style="background:var(--card);border-radius:14px;padding:24px;max-width:400px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3)">'+
-        '<div style="font-size:var(--fs-lg);font-weight:700;margin-bottom:8px">Refund Request</div>'+
-        '<div style="margin-bottom:12px;line-height:1.5;font-size:var(--fs-xs);color:var(--muted)">'+
-          'Enter the phone number or email address registered with your Zelle account.'+
-        '</div>'+
-        '<input id="refund_zelle" class="input" placeholder="Phone (e.g. 2145551234) or Email" style="margin-bottom:10px">'+
-        '<div id="refund_err" style="font-size:var(--fs-xs);color:var(--err);margin-bottom:10px;min-height:18px"></div>'+
-        '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
-          '<button id="refund_submit" class="btn">Submit</button>'+
-          '<button id="refund_cancel" class="btn secondary">Cancel</button>'+
-        '</div>'+
-      '</div>';
-    document.body.appendChild(modal);
-
-    var input  = modal.querySelector('#refund_zelle');
-    var errEl  = modal.querySelector('#refund_err');
-    var subBtn = modal.querySelector('#refund_submit');
-
-    function closeModal(){ modal.remove(); }
-    modal.querySelector('#refund_cancel').onclick = closeModal;
-    modal.addEventListener('click', function(e){ if (e.target === modal) closeModal(); });
-
-    setTimeout(function(){ input.focus(); }, 50);
-
-    subBtn.onclick = function(){
-      var val = (input.value || '').trim();
-      errEl.textContent = '';
-
-      // Validate: 10-digit phone or valid email
-      var isPhone = /^\d{10}$/.test(val.replace(/[\s\-\(\)\.]/g, ''));
-      var isEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(val);
-      if (!isPhone && !isEmail){
-        errEl.textContent = 'Enter a valid 10-digit phone number or email address.';
-        return;
-      }
-
-      var zelleTo = isPhone ? val.replace(/[\s\-\(\)\.]/g, '') : val;
-      var memo    = 'Refund to ' + zelleTo;
-
-      subBtn.disabled = true;
-      subBtn.textContent = 'Submitting…';
-
-      google.script.run
-        .withSuccessHandler(function(r){
-          subBtn.disabled = false; subBtn.textContent = 'Submit';
-          if (!r || !r.ok){ errEl.textContent = (r && r.error) || 'Refund request failed. Please try again.'; return; }
-          closeModal();
-          alert('Refund request submitted. An admin will review it shortly.');
-        })
-        .withFailureHandler(function(e){
-          subBtn.disabled = false; subBtn.textContent = 'Submit';
-          errEl.textContent = (e && e.message) || 'Refund request failed. Please try again.';
-        })
-        .api_submitRefundRequest(state.user.its, memo);
-    };
-  });
   balBox.querySelector('#downloadCsvBtn').addEventListener('click', function(){
     var btn = this, orig = btn.textContent;
     btn.disabled = true; btn.textContent = 'Preparing…';
@@ -1727,97 +1656,13 @@ function pageBalance(){
       layout(node);
     }
 
-    /* ===================== TEAMS ===================== */
-    function pageTeams(){ if(!guard())return;
-      showLoading('Loading teams…');
-      google.script.run
-        .withSuccessHandler(function(res){
-          if (!res || !res.ok){ layout(el('<div class="card" style="color:var(--err)">Failed to load teams.</div>')); return; }
-          _renderTeamsPage(res.teams||[]);
-        })
-        .withFailureHandler(function(e){
-          layout(el('<div class="card" style="color:var(--err)">'+(e&&e.message||'Failed to load teams.')+'</div>'));
-        })
-        .api_getTeams();
-    }
-
-    function _renderTeamsPage(teams){
-      state.tmp = state.tmp || {};
-      var selectedTeam = state.tmp.teams_filter || '';
-
-      var root = document.createElement('div');
-      root.className = 'stack';
-
-      var filterCard = document.createElement('div');
-      filterCard.className = 'card stack';
-      filterCard.innerHTML =
-        '<div class="label">Filter by Team</div>'+
-        '<select id="teams_filter" class="input">'+
-          '<option value="">All Teams</option>'+
-          teams.map(function(t){
-            return '<option value="'+_esc(t.name)+'"'+(selectedTeam===t.name?' selected':'')+'>'+_esc(t.name)+'</option>';
-          }).join('')+
-        '</select>';
-      root.appendChild(filterCard);
-
-      var listWrap = document.createElement('div');
-      listWrap.className = 'stack';
-      listWrap.id = 'teams_list';
-      root.appendChild(listWrap);
-
-      layout(root);
-
-      function renderList(){
-        var filter = document.getElementById('teams_filter').value;
-        state.tmp.teams_filter = filter;
-        var box = document.getElementById('teams_list');
-        var toShow = filter ? teams.filter(function(t){ return t.name===filter; }) : teams;
-
-        box.innerHTML = toShow.map(function(t){
-          var hex = t.hex || '#334155';
-          var rosterHtml = (t.roster||[]).map(function(p){
-            return '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,.08);display:flex;gap:8px">'+
-              '<div style="min-width:36px;font-weight:700;opacity:.8">'+_esc(p.number||'')+'</div>'+
-              '<div>'+_esc(p.name||'')+'</div>'+
-            '</div>';
-          }).join('') || '<div class="muted tiny">No roster listed</div>';
-
-          var sponsorHtml = t.sponsor
-            ? ('<div class="tiny"><b>Sponsor:</b> '+_esc(t.sponsor)+'</div>')
-            : '<div class="tiny muted">Sponsor: —</div>';
-
-          var captainHtml = (t.captain && t.captain.name)
-            ? (_esc(t.captain.number||'')+' '+_esc(t.captain.name))
-            : '—';
-
-          return '<div class="card stack" style="border-left:6px solid '+_esc(hex)+'">'+
-            '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
-              '<div style="display:flex;align-items:center;gap:10px">'+
-                '<div style="width:18px;height:18px;border-radius:50%;background:'+_esc(hex)+';border:1px solid rgba(255,255,255,.25)"></div>'+
-                '<div style="font-size:var(--fs-lg);font-weight:800">'+_esc(t.name)+'</div>'+
-              '</div>'+
-              '<div class="tiny muted">'+_esc(t.colorName||'')+'</div>'+
-            '</div>'+
-            sponsorHtml+
-            '<div class="tiny"><b>Captain:</b> '+captainHtml+'</div>'+
-            '<div class="label" style="margin-top:6px">Roster</div>'+
-            '<div>'+rosterHtml+'</div>'+
-          '</div>';
-        }).join('') || '<div class="card muted">No teams found.</div>';
-      }
-
-      document.getElementById('teams_filter').addEventListener('change', renderList);
-      renderList();
-    }
-
     /* ===================== JERSEY ===================== */
     var JERSEY_PRICES = [
       { label: '$20 – Short Sleeve Athletic Shirt',               amount: 20,  memo: 'Jersey: Short Sleeve Athletic',         sleeves:'Short', hood:'without Hood' },
       { label: '$25 – Long Sleeve Athletic Shirt',                amount: 25,  memo: 'Jersey: Long Sleeve Athletic',          sleeves:'Long',  hood:'without Hood' },
       { label: '$25 – Short Sleeve with Hood Athletic Shirt',     amount: 25,  memo: 'Jersey: Short Sleeve with Hood Athletic', sleeves:'Short',hood:'with Hood'    },
       { label: '$30 – Long Sleeve with Hood Athletic Shirt',      amount: 30,  memo: 'Jersey: Long Sleeve with Hood Athletic',  sleeves:'Long', hood:'with Hood'    },
-      { label: '$15 – Cotton Single Color Shirt w/ Screen Print', amount: 15,  memo: 'Jersey: Cotton Screen Print',            sleeves:null,   hood:null           },
-      { label: '$35 – MFL Cold Weather Hoodie',                   amount: 35,  memo: 'Jersey: MFL Cold Weather Hoodie',        sleeves:null,   hood:null           }
+      { label: '$15 – Cotton Single Color Shirt w/ Screen Print', amount: 15,  memo: 'Jersey: Cotton Screen Print',            sleeves:null,   hood:null           }
     ];
 
     function pageJersey(){ if(!guard()) return;
@@ -2077,13 +1922,6 @@ function pageBalance(){
           isMandatory: false,
           onSave: _makeSponsorShirtSaver('sponsor', s)
         }, res['shirt'+s] || {}));
-        root.appendChild(_buildShirtCard({
-          idPrefix:  'sp'+s+'h',
-          cardTitle: 'Hoodie '+s,
-          isHoodie:  true,
-          isMandatory: false,
-          onSave: _makeSponsorShirtSaver('sponsor_hoodie', s)
-        }, res['hoodie'+s] || {}));
       }
 
       layout(root);
@@ -2174,22 +2012,24 @@ function pageBalance(){
      * }
      * saved = previously-saved object (may be {})
      * ---------------------------------------------------------------------- */
-    var ATHLETIC_COLORS = ['Abdulqadir Chiba',
-'Aliasgar Hamid',
-'Ammar Danish',
-'Hasan Motiwala',
-'Hatim Hamid',
-'Hatim Nicobar',
-'Hussain Kanchwala',
-'Huzefa Raja Chicago',
-'Mehlam Khambati',
-'Mehlum Anjarwala',
-'Mustafa Burhani',
-'Mustafa Karimjee',
-'Mustafa Shakir',
-'Taha Nicobar',
-'Taher Adamji',
-'Taher Hamid'];
+    var ATHLETIC_COLORS = [
+      'Team Abdulqadir Chiba',
+      'Team Aliasgar Hamid',
+      'Team Ammar Danish',
+      'Team Hasan Motiwala',
+      'Team Hatim Hamid',
+      'Team Hatim Nicobar',
+      'Team Hussain Kanchwala',
+      'Team Huzefa Raja Chicago',
+      'Team Mehlam Khambati',
+      'Team Mehlum Anjarwala',
+      'Team Mustafa Burhani',
+      'Team Mustafa Karimjee',
+      'Team Mustafa Shakir',
+      'Team Taha Nicobar',
+      'Team Taher Adamji',
+      'Team Taher Hamid'
+    ];
     var SHIRT_SIZES     = ['XS','S','M','L','XL','2XL','3XL'];
 
     function _buildShirtCard(opts, saved){
@@ -2771,7 +2611,7 @@ ${evt.address || ''}`;
           ? " <button class='btn danger sm' data-act='admin-cancel' data-person='"+r.person+"'>Remove</button>"
           : "";
         return "<div style='padding:6px 0;border-bottom:1px solid var(--border)'>"+
-                 num+". "+r.name+(r.jamaat ? " - "+r.jamaat : "")+" "+statusBadge+" "+checkinBadge+removeBtn+
+                 num+". "+r.name+" "+statusBadge+" "+checkinBadge+removeBtn+
                "</div>";
       }).join('');
 
@@ -3625,683 +3465,6 @@ if (!isAdmin){
       layout(node);
     }
 
-    /* ===================== CAPTAINS ===================== */
-    function pageCaptains(){ if(!guard()) return;
-      showLoading('Loading rankings…');
-      google.script.run
-        .withSuccessHandler(function(res){
-          if (!res || !res.ok){ layout(el('<div class="card" style="color:var(--err)">Failed to load rankings: '+(res&&res.error||'')+'</div>')); return; }
-          _renderCaptainsPage(res);
-        })
-        .withFailureHandler(function(e){
-          layout(el('<div class="card" style="color:var(--err)">'+(e&&e.message||'Failed to load rankings.')+'</div>'));
-        })
-        .api_getRankings(state.user.its);
-    }
-
-    function _renderCaptainsPage(res){
-      // res.sections = [{ header: 'QBs', players: [{ its, name }, …] }, …]
-      // res.myVote = { its: submitterIts, picks: [{ its, name, tier }] } | null
-      var sections  = res.sections || [];
-      var myVote    = res.myVote   || null;
-
-      // If already voted, show read-only summary
-      if (myVote && myVote.picks && myVote.picks.length){
-        var root2 = document.createElement('div');
-        root2.className = 'stack';
-        var doneCard = document.createElement('div');
-        doneCard.className = 'card stack';
-        doneCard.innerHTML =
-          '<div style="font-size:var(--fs-md);font-weight:700;margin-bottom:6px">✓ Votes Submitted</div>'+
-          '<div class="muted" style="margin-bottom:12px">You have already submitted your votes. Contact an admin to make changes.</div>'+
-          '<div class="label">Your Selection</div>'+
-          '<div class="stack" style="gap:6px">'+
-          myVote.picks.map(function(p, i){
-            var color = p.tier===1 ? '#3b82f6' : '#f59e0b';
-            var label = p.tier===1 ? 'Top' : 'Bot';
-            return '<div style="display:flex;gap:8px;align-items:center;font-size:var(--fs-xs)">'+
-              '<span style="font-weight:700;color:'+color+';min-width:32px">'+(i+1)+'.</span>'+
-              '<span style="flex:1">'+_esc(p.name)+'</span>'+
-              '<span style="color:'+color+';font-weight:700">'+label+'</span>'+
-            '</div>';
-          }).join('')+
-          '</div>';
-        root2.appendChild(doneCard);
-        layout(root2);
-        return;
-      }
-
-      var root = document.createElement('div');
-      root.className = 'stack';
-
-      /* ---- Instructions card ---- */
-      var instrCard = document.createElement('div');
-      instrCard.className = 'card stack';
-      instrCard.innerHTML =
-        '<div style="font-size:var(--fs-md);font-weight:700;margin-bottom:6px">Captain Voting</div>'+
-        '<div class="muted" style="line-height:1.6">'+
-          'Choose the <strong>16 Most Talented Players</strong>, including offensive and defensive skill, whether they are QBs or WRs. '+
-          'However, evaluate each player\'s talent based on their designation as QB or WR. '+
-          '<br/><br/>'+
-          'The <strong>first 8 players</strong> you choose will be labeled <span style="color:#3b82f6;font-weight:700">Top</span> (top eight captains). '+
-          'The <strong>next 8</strong> will be labeled <span style="color:#f59e0b;font-weight:700">Bot</span> (bottom eight captains).'+
-        '</div>';
-      root.appendChild(instrCard);
-
-      /* ---- Selection counter card ---- */
-      var counterCard = document.createElement('div');
-      counterCard.className = 'card';
-      counterCard.id = 'cap_counter';
-      root.appendChild(counterCard);
-
-      /* ---- Player sections ---- */
-      sections.forEach(function(sec){
-        var secCard = document.createElement('div');
-        secCard.className = 'card stack';
-        secCard.innerHTML = '<div class="label" style="font-size:var(--fs-sm);font-weight:700">'+_esc(sec.header)+'</div>';
-
-        sec.players.forEach(function(player){
-          var row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)';
-          row.id = 'cap_row_'+player.its;
-          row.innerHTML =
-            '<div style="font-size:var(--fs-sm)">'+_esc(player.name)+'</div>'+
-            '<button class="btn secondary cap-pick-btn" data-its="'+player.its+'" data-name="'+_esc(player.name)+'" style="min-width:60px;padding:6px 12px;font-size:var(--fs-xs)">Pick</button>';
-          secCard.appendChild(row);
-        });
-
-        root.appendChild(secCard);
-      });
-
-      /* ---- Submit card ---- */
-      var submitCard = document.createElement('div');
-      submitCard.className = 'card stack';
-      submitCard.innerHTML =
-        '<div class="label">Your Selection (<span id="cap_sel_count">0</span>/16)</div>'+
-        '<div id="cap_sel_list" class="stack" style="gap:6px;margin-bottom:8px"></div>'+
-        '<button class="btn" id="cap_submit_btn" disabled>Submit Votes</button>'+
-        '<div class="tiny" id="cap_err" style="color:var(--err)"></div>';
-      root.appendChild(submitCard);
-
-      var selected = []; // tracks chosen players in order
-
-      layout(root);
-
-      /* ---- Wire everything ---- */
-      function updateUI(){
-        // Counter
-        var counterEl = document.getElementById('cap_counter');
-        if (counterEl) counterEl.innerHTML =
-          '<span style="font-weight:700;font-size:var(--fs-sm)">'+selected.length+' / 16 selected</span>'+
-          (selected.length < 8 ? '<span class="muted" style="margin-left:8px">— next picks will be <span style="color:#3b82f6;font-weight:600">Top</span></span>' :
-           selected.length < 16 ? '<span class="muted" style="margin-left:8px">— next picks will be <span style="color:#f59e0b;font-weight:600">Bot</span></span>' :
-           '<span class="muted" style="margin-left:8px">— selection complete</span>');
-
-        // Selection count badge
-        var countEl = document.getElementById('cap_sel_count');
-        if (countEl) countEl.textContent = selected.length;
-
-        // Selection list
-        var listEl = document.getElementById('cap_sel_list');
-        if (listEl){
-          if (!selected.length){
-            listEl.innerHTML = '<div class="muted tiny">No players selected yet.</div>';
-          } else {
-            listEl.innerHTML = selected.map(function(p, i){
-              var tier = i < 8 ? 'Top' : 'Bot';
-              var color = i < 8 ? '#3b82f6' : '#f59e0b';
-              return '<div style="display:flex;align-items:center;gap:8px;font-size:var(--fs-xs)">'+
-                '<span style="font-weight:700;color:'+color+';min-width:32px">'+(i+1)+'.</span>'+
-                '<span style="flex:1">'+_esc(p.name)+'</span>'+
-                '<span style="color:'+color+';font-weight:700;min-width:32px">'+tier+'</span>'+
-                '<button class="btn danger" data-remove="'+p.its+'" style="padding:3px 8px;font-size:var(--fs-xxxs)">✕</button>'+
-              '</div>';
-            }).join('');
-
-            // Wire remove buttons
-            listEl.querySelectorAll('[data-remove]').forEach(function(rb){
-              rb.onclick = function(){
-                var its = rb.getAttribute('data-remove');
-                selected = selected.filter(function(p){ return p.its !== its; });
-                updateBtnForIts(its);
-                updateUI();
-              };
-            });
-          }
-        }
-
-        // Update all pick buttons
-        document.querySelectorAll('.cap-pick-btn').forEach(function(btn){
-          var its = btn.getAttribute('data-its');
-          updateBtnEl(btn, its);
-        });
-
-        // Submit button
-        var subBtn = document.getElementById('cap_submit_btn');
-        if (subBtn) subBtn.disabled = (selected.length !== 16);
-      }
-
-      function updateBtnForIts(its){
-        var btn = document.querySelector('.cap-pick-btn[data-its="'+its+'"]');
-        if (btn) updateBtnEl(btn, its);
-      }
-
-      function updateBtnEl(btn, its){
-        var idx = selected.findIndex(function(p){ return p.its === its; });
-        if (idx === -1){
-          // Not selected
-          btn.textContent = selected.length >= 16 ? '—' : 'Pick';
-          btn.disabled = selected.length >= 16;
-          btn.className = 'btn secondary cap-pick-btn';
-          btn.style.minWidth = '60px';
-          btn.style.padding = '6px 12px';
-          btn.style.fontSize = 'var(--fs-xs)';
-        } else {
-          var tier = idx < 8 ? 'Top' : 'Bot';
-          var color = idx < 8 ? '#3b82f6' : '#f59e0b';
-          btn.textContent = (idx+1)+'. '+tier;
-          btn.disabled = false;
-          btn.className = 'btn cap-pick-btn';
-          btn.style.background = color;
-          btn.style.borderColor = color;
-          btn.style.minWidth = '60px';
-          btn.style.padding = '6px 12px';
-          btn.style.fontSize = 'var(--fs-xs)';
-        }
-      }
-
-      // Apply prior vote if any
-      if (selected.length) updateUI();
-      else updateUI();
-
-      // Wire pick buttons
-      document.querySelectorAll('.cap-pick-btn').forEach(function(btn){
-        btn.addEventListener('click', function(){
-          var its  = btn.getAttribute('data-its');
-          var name = btn.getAttribute('data-name');
-          var idx  = selected.findIndex(function(p){ return p.its === its; });
-          if (idx !== -1){
-            // Already selected — deselect
-            selected.splice(idx, 1);
-          } else {
-            if (selected.length >= 16) return;
-            selected.push({ its: its, name: name });
-          }
-          updateUI();
-        });
-      });
-
-      // Wire submit
-      var subBtn = document.getElementById('cap_submit_btn');
-      if (subBtn) subBtn.onclick = function(){
-        var errEl = document.getElementById('cap_err');
-        errEl.textContent = '';
-        if (selected.length !== 16){ errEl.textContent = 'Please select exactly 16 players.'; return; }
-
-        // Build payload: picks array with its + tier (1=top8, 2=bot8)
-        var picks = selected.map(function(p, i){
-          return { its: p.its, name: p.name, tier: i < 8 ? 1 : 2 };
-        });
-
-        withClickLock('captains:vote:'+state.user.its, subBtn, 'Submitting…', function(done){
-          google.script.run
-            .withSuccessHandler(function(r){
-              done();
-              if (!r || !r.ok){ errEl.textContent = (r&&r.error)||'Submit failed. Please try again.'; return; }
-              errEl.textContent = '';
-              alert('Votes submitted! Thank you.');
-            })
-            .withFailureHandler(function(e){ done(); errEl.textContent = (e&&e.message)||'Submit failed.'; })
-            .api_submitCaptainVotes(state.user.its, picks);
-        });
-      };
-    }
-
-    /* ===================== BID ===================== */
-    function pageBid(){ if(!guard()) return;
-      showLoading('Loading bid room…');
-      google.script.run
-        .withSuccessHandler(function(res){
-          if (!res || !res.ok){
-            layout(el('<div class="card" style="color:var(--err)">'+( res&&res.error||'Access denied or failed to load.')+'</div>'));
-            return;
-          }
-          _renderBidPage(res);
-        })
-        .withFailureHandler(function(e){
-          layout(el('<div class="card" style="color:var(--err)">'+(e&&e.message||'Failed to load bid room.')+'</div>'));
-        })
-        .api_getBidData(state.user.its);
-    }
-
-    function _renderBidPage(res){
-      // res = { ok, captainName, balances:[{name,balance}], myBids:[{slot,player,amount}],
-      //         players:[], maxBids:16, round:1|2 }
-      var captainName = res.captainName || '';
-      var balances    = res.balances    || [];
-      var myBids      = res.myBids      || [];
-      var players     = res.players     || [];
-      var round       = res.round       || 1;
-      var maxBids     = 16;
-
-      var root = document.createElement('div');
-      root.className = 'stack';
-
-      /* ---- Balances summary card ---- */
-      var balCard = document.createElement('div');
-      balCard.className = 'card';
-      balCard.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
-          '<div class="label">Balances — R'+round+'</div>'+
-          '<button class="btn secondary" id="bid_info_btn">Player Info →</button>'+
-        '</div>'+
-        '<div style="display:flex;flex-wrap:wrap;gap:6px 16px">'+
-        balances.map(function(b){
-          var isSelf = b.name === captainName;
-          var color  = isSelf ? '#3b82f6' : 'var(--muted)';
-          return '<span style="font-size:var(--fs-xs);color:'+color+';font-weight:'+(isSelf?'700':'400')+'">'+
-            _esc(b.name)+': <strong>$'+Number(b.balance||0).toFixed(0)+'</strong>'+
-          '</span>';
-        }).join('')+
-        '</div>';
-      root.appendChild(balCard);
-      var bidInfoBtn = balCard.querySelector('#bid_info_btn');
-      if (bidInfoBtn) bidInfoBtn.onclick = function(){ router.navigate('info'); };
-
-      /* ---- My bids card ---- */
-      var bidsCard = document.createElement('div');
-      bidsCard.className = 'card stack';
-      bidsCard.id = 'bid_my_card';
-      var maxBids = 16;
-
-      function renderMyBids(){
-        var used = myBids.length;
-        var remaining = maxBids - used;
-        bidsCard.innerHTML =
-          '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
-            '<div class="label" style="font-size:var(--fs-sm);font-weight:700">Your Bids</div>'+
-            '<div class="tiny muted">'+used+' / '+maxBids+' bids used</div>'+
-          '</div>'+
-          (myBids.length ?
-            '<table class="table table--compact">'+
-              '<thead><tr><th>Queue</th><th>Player</th><th>Bid</th><th></th></tr></thead>'+
-              '<tbody id="bid_rows">'+
-              myBids.map(function(b){
-                return '<tr id="bid_row_'+b.slot+'">'+
-                  '<td>'+b.slot+'</td>'+
-                  '<td>'+_esc(b.player)+'</td>'+
-                  '<td>$'+Number(b.amount).toFixed(2)+'</td>'+
-                  '<td style="display:flex;gap:6px">'+
-                    '<button class="btn secondary bid-edit-btn" data-slot="'+b.slot+'" style="padding:4px 8px;font-size:var(--fs-xxxs)">Edit</button>'+
-                    '<button class="btn danger bid-del-btn" data-slot="'+b.slot+'" style="padding:4px 8px;font-size:var(--fs-xxxs)">✕</button>'+
-                  '</td>'+
-                '</tr>';
-              }).join('')+
-              '</tbody>'+
-            '</table>'
-          : '<div class="muted tiny">No bids yet.</div>')+
-          /* Add new bid form */
-          (used < maxBids ?
-            '<div class="label" style="margin-top:8px">Add New Bid</div>'+
-            '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'+
-              '<div class="stack" style="flex:1;min-width:120px">'+
-                '<label class="label">Amount ($)</label>'+
-                '<input id="bid_amt" class="input" type="number" min="1" placeholder="e.g. 53">'+
-              '</div>'+
-              '<div class="stack" style="flex:2;min-width:180px">'+
-                '<label class="label">Player</label>'+
-                '<select id="bid_player" class="input">'+
-                  '<option value="">Select player…</option>'+
-                  players.map(function(p){ return '<option value="'+_esc(p)+'">'+_esc(p)+'</option>'; }).join('')+
-                '</select>'+
-              '</div>'+
-              '<button class="btn" id="bid_add_btn">Add Bid</button>'+
-            '</div>'+
-            '<div class="tiny" id="bid_err" style="color:var(--err)"></div>'
-          : '<div class="tiny muted" style="margin-top:4px">Maximum of 16 bids reached.</div>');
-
-        /* Wire delete buttons */
-        bidsCard.querySelectorAll('.bid-del-btn').forEach(function(btn){
-          btn.onclick = function(){
-            var slot = Number(btn.getAttribute('data-slot'));
-            if (!confirm('Remove bid in slot '+slot+'?')) return;
-            btn.disabled = true;
-            google.script.run
-              .withSuccessHandler(function(r){
-                if (!r||!r.ok){ alert((r&&r.error)||'Failed to remove.'); btn.disabled=false; return; }
-                myBids = myBids.filter(function(b){ return b.slot !== slot; });
-                renderMyBids();
-              })
-              .withFailureHandler(function(e){ alert(e&&e.message||'Failed.'); btn.disabled=false; })
-              .api_removeBid(state.user.its, slot, round);
-          };
-        });
-
-        /* Wire edit buttons */
-        bidsCard.querySelectorAll('.bid-edit-btn').forEach(function(btn){
-          btn.onclick = function(){
-            var slot   = Number(btn.getAttribute('data-slot'));
-            var curBid = myBids.find(function(b){ return b.slot===slot; });
-            if (!curBid) return;
-
-            var modal = document.createElement('div');
-            modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-            modal.innerHTML =
-              '<div style="background:var(--card);border-radius:14px;padding:24px;max-width:360px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3)">'+
-                '<div style="font-weight:700;font-size:var(--fs-md);margin-bottom:12px">Edit Bid — Slot '+slot+'</div>'+
-                '<div class="stack" style="gap:10px">'+
-                  '<div class="stack"><label class="label">Amount ($)</label>'+
-                    '<input id="edit_amt" class="input" type="number" min="1" value="'+curBid.amount+'"></div>'+
-                  '<div class="stack"><label class="label">Player</label>'+
-                    '<select id="edit_player" class="input">'+
-                      players.map(function(p){
-                        return '<option value="'+_esc(p)+'"'+(p===curBid.player?' selected':'')+'>'+_esc(p)+'</option>';
-                      }).join('')+
-                    '</select></div>'+
-                  '<div id="edit_err" style="color:var(--err);font-size:var(--fs-xs)"></div>'+
-                  '<div style="display:flex;gap:8px">'+
-                    '<button class="btn" id="edit_save">Save</button>'+
-                    '<button class="btn secondary" id="edit_cancel">Cancel</button>'+
-                  '</div>'+
-                '</div>'+
-              '</div>';
-            document.body.appendChild(modal);
-
-            modal.querySelector('#edit_cancel').onclick = function(){ modal.remove(); };
-            modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
-
-            modal.querySelector('#edit_save').onclick = function(){
-              var amt    = Number(modal.querySelector('#edit_amt').value||0);
-              var player = modal.querySelector('#edit_player').value;
-              var errEl  = modal.querySelector('#edit_err');
-              errEl.textContent = '';
-              if (!amt||amt<=0){ errEl.textContent='Enter a valid amount.'; return; }
-              if (amt>198)     { errEl.textContent='Maximum bid amount is $198.'; return; }
-              if (!player){ errEl.textContent='Choose a player.'; return; }
-              var saveBtn = modal.querySelector('#edit_save');
-              saveBtn.disabled=true; saveBtn.textContent='Saving…';
-              google.script.run
-                .withSuccessHandler(function(r){
-                  if (!r||!r.ok){ errEl.textContent=(r&&r.error)||'Save failed.'; saveBtn.disabled=false; saveBtn.textContent='Save'; return; }
-                  var bidEntry = myBids.find(function(b){ return b.slot===slot; });
-                  if (bidEntry){ bidEntry.amount=amt; bidEntry.player=player; }
-                  modal.remove();
-                  renderMyBids();
-                })
-                .withFailureHandler(function(e){ errEl.textContent=(e&&e.message)||'Save failed.'; saveBtn.disabled=false; saveBtn.textContent='Save'; })
-                .api_updateBid(state.user.its, slot, amt, player, round);
-            };
-          };
-        });
-
-        /* Wire add button */
-        /* Wire add button — use event delegation on bidsCard since innerHTML recreates DOM */
-        bidsCard.onclick = function(e){
-          if (e.target && e.target.id === 'bid_add_btn'){
-            var amt    = Number((document.getElementById('bid_amt')||{}).value||0);
-            var player = (document.getElementById('bid_player')||{}).value||'';
-            var errEl  = document.getElementById('bid_err');
-            if (errEl) errEl.textContent='';
-            if (!amt||amt<=0)  { if(errEl) errEl.textContent='Enter a valid amount.'; return; }
-            if (amt>198)       { if(errEl) errEl.textContent='Maximum bid amount is $198.'; return; }
-            if (!player)       { if(errEl) errEl.textContent='Choose a player.'; return; }
-            var addBtn = e.target;
-            addBtn.disabled=true; addBtn.textContent='Adding…';
-            google.script.run
-              .withSuccessHandler(function(r){
-                addBtn.disabled=false; addBtn.textContent='Add Bid';
-                if (!r||!r.ok){ if(errEl) errEl.textContent=(r&&r.error)||'Failed to add bid.'; return; }
-                myBids.push({ slot: r.slot, amount: amt, player: player });
-                renderMyBids();
-              })
-              .withFailureHandler(function(e){
-                addBtn.disabled=false; addBtn.textContent='Add Bid';
-                if(errEl) errEl.textContent=(e&&e.message)||'Failed to add bid.';
-              })
-              .api_addBid(state.user.its, amt, player, round);
-          }
-        };
-      }
-
-      renderMyBids();
-      root.appendChild(bidsCard);
-      layout(root);
-    }
-
-    /* ===================== CAPTAIN INFO (hidden — Bid captains only) ===================== */
-    var _infoState = { players: [], search: '', avail: 'all', position: 'all', sort: 'tier', dir: 'asc' };
-
-    function pageInfo(){ if(!guard()) return;
-      showLoading('Loading player info…');
-      google.script.run
-        .withSuccessHandler(function(res){
-          if (!res || !res.ok){
-            layout(el('<div class="card" style="color:var(--err)">'+(res&&res.error||'Access denied or failed to load.')+'</div>'));
-            return;
-          }
-          _infoState.players = res.players || [];
-          _infoState.search = '';
-          _infoState.avail = 'all';
-          _infoState.position = 'all';
-          _infoState.sort = 'tier';
-          _infoState.dir = 'asc';
-          _renderInfoPage();
-        })
-        .withFailureHandler(function(e){
-          layout(el('<div class="card" style="color:var(--err)">'+(e&&e.message||'Failed to load player info.')+'</div>'));
-        })
-        .api_getCaptainInfoData(state.user.its);
-    }
-
-    var INFO_SORT_OPTIONS = [
-      { value:'tier',   label:'Tier' },
-      { value:'name',   label:'Name' },
-      { value:'height', label:'Height' },
-      { value:'age',    label:'Age' }
-    ];
-
-    function _renderInfoPage(){
-      var root = document.createElement('div');
-      root.className = 'stack';
-
-      var header = document.createElement('div');
-      header.className = 'card stack';
-      header.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
-          '<div class="label" style="font-size:var(--fs-md);font-weight:800">Registered Players</div>'+
-          '<button class="btn secondary" id="info_back_btn">← Back to Bid Room</button>'+
-        '</div>'+
-        '<div class="row" style="align-items:flex-end">'+
-          '<div class="col" style="min-width:200px">'+
-            '<label class="label">Search (name or Jamaat)</label>'+
-            '<input id="info_search" class="input" placeholder="Search…" value="'+_esc(_infoState.search)+'">'+
-          '</div>'+
-          '<div class="col" style="min-width:160px;max-width:220px">'+
-            '<label class="label">Availability</label>'+
-            '<select id="info_avail" class="input">'+
-              '<option value="all"'+(_infoState.avail==='all'?' selected':'')+'>All</option>'+
-              '<option value="available"'+(_infoState.avail==='available'?' selected':'')+'>Available Only</option>'+
-              '<option value="drafted"'+(_infoState.avail==='drafted'?' selected':'')+'>Drafted / Unavailable</option>'+
-            '</select>'+
-          '</div>'+
-          '<div class="col" style="min-width:150px;max-width:200px">'+
-            '<label class="label">Position</label>'+
-            '<select id="info_position" class="input">'+
-              '<option value="all"'+(_infoState.position==='all'?' selected':'')+'>All</option>'+
-              '<option value="qb"'+(_infoState.position==='qb'?' selected':'')+'>QBs Only</option>'+
-              '<option value="nonqb"'+(_infoState.position==='nonqb'?' selected':'')+'>WRs Only</option>'+
-            '</select>'+
-          '</div>'+
-          '<div class="col" style="min-width:140px;max-width:180px">'+
-            '<label class="label">Sort By</label>'+
-            '<select id="info_sort" class="input">'+
-              INFO_SORT_OPTIONS.map(function(o){
-                return '<option value="'+o.value+'"'+(_infoState.sort===o.value?' selected':'')+'>'+o.label+'</option>';
-              }).join('')+
-            '</select>'+
-          '</div>'+
-          '<div class="col" style="min-width:110px;max-width:130px">'+
-            '<label class="label">Order</label>'+
-            '<select id="info_dir" class="input">'+
-              '<option value="asc"'+(_infoState.dir==='asc'?' selected':'')+'>Ascending</option>'+
-              '<option value="desc"'+(_infoState.dir==='desc'?' selected':'')+'>Descending</option>'+
-            '</select>'+
-          '</div>'+
-        '</div>';
-      root.appendChild(header);
-
-      var listCard = document.createElement('div');
-      listCard.className = 'card stack';
-      listCard.id = 'info_list_card';
-      root.appendChild(listCard);
-
-      layout(root);
-
-      var backBtn = document.getElementById('info_back_btn');
-      if (backBtn) backBtn.onclick = function(){ router.navigate('bid'); };
-
-      var searchEl = document.getElementById('info_search');
-      if (searchEl) searchEl.addEventListener('input', function(){
-        _infoState.search = this.value || '';
-        _renderInfoList();
-      });
-
-      var availEl = document.getElementById('info_avail');
-      if (availEl) availEl.addEventListener('change', function(){
-        _infoState.avail = this.value || 'all';
-        _renderInfoList();
-      });
-
-      var positionEl = document.getElementById('info_position');
-      if (positionEl) positionEl.addEventListener('change', function(){
-        _infoState.position = this.value || 'all';
-        _renderInfoList();
-      });
-
-      var sortEl = document.getElementById('info_sort');
-      if (sortEl) sortEl.addEventListener('change', function(){
-        _infoState.sort = this.value || 'tier';
-        _renderInfoList();
-      });
-
-      var dirEl = document.getElementById('info_dir');
-      if (dirEl) dirEl.addEventListener('change', function(){
-        _infoState.dir = this.value || 'asc';
-        _renderInfoList();
-      });
-
-      _renderInfoList();
-    }
-
-    /* Convert a height string like "5ft 10in" back to total inches for sorting.
-       Falls back to 0 (sorts to one end) when unparsable. */
-    function _infoHeightToInches_(h){
-      if (!h) return null;
-      var m = String(h).match(/(\d+)\s*ft\s*(\d+)\s*in/i);
-      if (!m) return null;
-      return (Number(m[1])||0)*12 + (Number(m[2])||0);
-    }
-
-    function _infoCompare_(a, b, sortKey){
-      if (sortKey === 'name'){
-        return String(a.name||'').localeCompare(String(b.name||''));
-      }
-      if (sortKey === 'height'){
-        var ha = _infoHeightToInches_(a.height), hb = _infoHeightToInches_(b.height);
-        var va = ha!=null, vb = hb!=null;
-        if (va && vb) return ha - hb;
-        if (va) return -1;
-        if (vb) return 1;
-        return 0;
-      }
-      if (sortKey === 'age'){
-        var aa = (a.age!==''&&a.age!=null) ? Number(a.age) : null;
-        var ab = (b.age!==''&&b.age!=null) ? Number(b.age) : null;
-        var vaa = aa!=null, vab = ab!=null;
-        if (vaa && vab) return aa - ab;
-        if (vaa) return -1;
-        if (vab) return 1;
-        return 0;
-      }
-      // default: tier
-      var ta = (a.tier!==''&&a.tier!=null) ? Number(a.tier) : null;
-      var tb = (b.tier!==''&&b.tier!=null) ? Number(b.tier) : null;
-      var vta = ta!=null && isFinite(ta), vtb = tb!=null && isFinite(tb);
-      if (vta && vtb) return ta - tb;
-      if (vta) return -1;
-      if (vtb) return 1;
-      return String(a.name||'').localeCompare(String(b.name||''));
-    }
-
-    function _renderInfoList(){
-      var box = document.getElementById('info_list_card');
-      if (!box) return;
-
-      var q = (_infoState.search||'').trim().toLowerCase();
-      var list = _infoState.players.filter(function(p){
-        if (_infoState.avail === 'available' && !p.available) return false;
-        if (_infoState.avail === 'drafted' && p.available) return false;
-        if (_infoState.position === 'qb' && !p.isQB) return false;
-        if (_infoState.position === 'nonqb' && p.isQB) return false;
-        if (q){
-          var hay = (String(p.name||'')+' '+String(p.jamaat||'')).toLowerCase();
-          if (hay.indexOf(q) === -1) return false;
-        }
-        return true;
-      });
-
-      list.sort(function(a,b){
-        var c = _infoCompare_(a, b, _infoState.sort);
-        return _infoState.dir === 'desc' ? -c : c;
-      });
-
-      if (!list.length){
-        box.innerHTML = '<div class="muted">No players match.</div>';
-        return;
-      }
-
-      box.innerHTML =
-        '<div class="tiny muted" style="margin-bottom:4px">Showing '+list.length+' of '+_infoState.players.length+' players</div>'+
-        '<table class="table table--compact">'+
-          '<thead><tr>'+
-            '<th>Status</th>'+
-            '<th>Picture</th>'+
-            '<th>Name</th>'+
-            '<th>Tier</th>'+
-            '<th>Jamaat</th>'+
-            '<th>Height</th>'+
-            '<th>Weight</th>'+
-            '<th>Age</th>'+
-            '<th>Whatsapp</th>'+
-            '<th>Position</th>'+
-          '</tr></thead>'+
-          '<tbody>'+
-          list.map(function(p){
-            var picHtml = p.picture
-              ? '<img src="'+_esc(p.picture)+'" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;background:var(--surface)" onerror="this.style.display=\'none\'">'
-              : '<div style="width:40px;height:40px;border-radius:8px;background:var(--surface)"></div>';
-            var badge = p.available
-              ? '<span class="badge ok">Available</span>'
-              : '<span class="badge warn">Drafted</span>';
-            var qbBadge = p.isQB
-              ? '<span class="badge" style="background:rgba(59,130,246,.15);color:#93c5fd;border-color:rgba(59,130,246,.35)">QB</span>'
-              : '<span class="badge" style="background:rgba(159,179,200,.12);color:var(--muted);border-color:rgba(159,179,200,.3)">WR</span>';
-            return '<tr>'+
-              '<td>'+badge+'</td>'+
-              '<td>'+picHtml+'</td>'+
-              '<td style="font-weight:700">'+_esc(p.name||'')+'</td>'+
-              '<td>'+((p.tier!==''&&p.tier!=null)? _esc(String(p.tier)) : '—')+'</td>'+
-              '<td>'+_esc(p.jamaat||'—')+'</td>'+
-              '<td>'+_esc(p.height||'—')+'</td>'+
-              '<td>'+(p.weight? (_esc(String(p.weight))+' lb') : '—')+'</td>'+
-              '<td>'+((p.age!==''&&p.age!=null)? _esc(String(p.age)) : '—')+'</td>'+
-              '<td>'+_esc(p.whatsapp||'—')+'</td>'+
-              '<td>'+qbBadge+'</td>'+
-            '</tr>';
-          }).join('')+
-          '</tbody>'+
-        '</table>';
-    }
     /* ===================== ROUTER + RENDER ===================== */
     function render(){
       buildNav();
@@ -4314,7 +3477,6 @@ if (!isAdmin){
       if(state.page==='profile') return pageProfile();
       if(state.page==='balance') return pageBalance();
       if(state.page==='calendar') return pageCalendar();
-      if(state.page==='teams')    return pageTeams();
       if(state.page==='jersey')   return pageJersey();
       if(state.page==='sponsor')  return pageSponsor();
       if(state.page==='guests') return pageGuests();
@@ -4324,9 +3486,6 @@ if (!isAdmin){
       if(state.page==='admin_ci') return pageAdminCI();
 
       if(state.page==='stat') return pageStat();
-      if(state.page==='captains') return pageCaptains();
-      if(state.page==='bid')      return pageBid();
-      if(state.page==='info')     return pageInfo();
       if(state.page==='qrcheck') return pageQrCheckin();
 
       if (state.page && state.page.startsWith('captain_')) {
