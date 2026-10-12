@@ -1731,8 +1731,7 @@ function pageBalance(){
       { label: '$25 – Long Sleeve Athletic Shirt',                amount: 25,  memo: 'Jersey: Long Sleeve Athletic',          sleeves:'Long',  hood:'without Hood' },
       { label: '$25 – Short Sleeve with Hood Athletic Shirt',     amount: 25,  memo: 'Jersey: Short Sleeve with Hood Athletic', sleeves:'Short',hood:'with Hood'    },
       { label: '$30 – Long Sleeve with Hood Athletic Shirt',      amount: 30,  memo: 'Jersey: Long Sleeve with Hood Athletic',  sleeves:'Long', hood:'with Hood'    },
-      { label: '$15 – Cotton Single Color Shirt w/ Screen Print', amount: 15,  memo: 'Jersey: Cotton Screen Print',            sleeves:null,   hood:null           },
-      { label: '$35 – MFL Cold Weather Hoodie',                   amount: 35,  memo: 'Jersey: MFL Cold Weather Hoodie',        sleeves:null,   hood:null           }
+      { label: '$15 – Cotton Single Color Shirt w/ Screen Print', amount: 15,  memo: 'Jersey: Cotton Screen Print',            sleeves:null,   hood:null           }
     ];
 
     function pageJersey(){ if(!guard()) return;
@@ -1784,6 +1783,7 @@ function pageBalance(){
       }).join('');
       purchaseCard.innerHTML =
         '<div class="label">Purchase a Shirt</div>'+
+                '<div class="muted">You must first add funds to your balance (instructions on Balance page), then choose the shirt you want to purchase. You will then be prompted to add shirt name and number information.</div>'+
         '<div class="stack" style="gap:8px">'+btnRows+'</div>'+
         '<div class="tiny" id="jr_buy_err" style="color:var(--err);margin-top:4px"></div>';
       root.appendChild(purchaseCard);
@@ -1992,13 +1992,6 @@ function pageBalance(){
           isMandatory: false,
           onSave: _makeSponsorShirtSaver('sponsor', s)
         }, res['shirt'+s] || {}));
-        root.appendChild(_buildShirtCard({
-          idPrefix:  'sp'+s+'h',
-          cardTitle: 'Hoodie '+s,
-          isHoodie:  true,
-          isMandatory: false,
-          onSave: _makeSponsorShirtSaver('sponsor_hoodie', s)
-        }, res['hoodie'+s] || {}));
       }
 
       layout(root);
@@ -2089,7 +2082,24 @@ function pageBalance(){
      * }
      * saved = previously-saved object (may be {})
      * ---------------------------------------------------------------------- */
-    var ATHLETIC_COLORS = ['Gold','Blue','Red','Gray','Orange','Brown','Pink','Black','Purple','Fuchsia','Green','Maroon','Lime','Teal','White','Sky'];
+    var ATHLETIC_COLORS = [
+      'Team Abdulqadir Chiba',
+      'Team Aliasgar Hamid',
+      'Team Ammar Danish',
+      'Team Hasan Motiwala',
+      'Team Hatim Hamid',
+      'Team Hatim Nicobar',
+      'Team Hussain Kanchwala',
+      'Team Huzefa Raja Chicago',
+      'Team Mehlam Khambati',
+      'Team Mehlum Anjarwala',
+      'Team Mustafa Burhani',
+      'Team Mustafa Karimjee',
+      'Team Mustafa Shakir',
+      'Team Taha Nicobar',
+      'Team Taher Adamji',
+      'Team Taher Hamid'
+    ];
     var SHIRT_SIZES     = ['XS','S','M','L','XL','2XL','3XL'];
 
     function _buildShirtCard(opts, saved){
@@ -2262,6 +2272,7 @@ function pageBalance(){
         }
       });
     }
+
 
     /* ===================== GUESTS ===================== */
     function pageGuests(){ if(!guard())return;
