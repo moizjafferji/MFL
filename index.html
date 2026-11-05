@@ -1778,7 +1778,7 @@ function pageBalance(){
           var hex = t.hex || '#334155';
           var rosterHtml = (t.roster||[]).map(function(p){
             return '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,.08);display:flex;gap:8px">'+
-              '<div style="min-width:36px;font-weight:700;opacity:.8">'+_esc(p.number||'')+'</div>'+
+              '<div style="min-width:36px;font-weight:700;opacity:.8">'+_esc((p.number==null?'':p.number))+'</div>'+
               '<div>'+_esc(p.name||'')+'</div>'+
             '</div>';
           }).join('') || '<div class="muted tiny">No roster listed</div>';
@@ -1788,7 +1788,7 @@ function pageBalance(){
             : '<div class="tiny muted">Sponsor: —</div>';
 
           var captainHtml = (t.captain && t.captain.name)
-            ? (_esc(t.captain.number||'')+' '+_esc(t.captain.name))
+            ? (_esc((t.captain.number==null?'':t.captain.number))+' '+_esc(t.captain.name))
             : '—';
 
           return '<div class="card stack" style="border-left:6px solid '+_esc(hex)+'">'+
@@ -2099,7 +2099,7 @@ function pageBalance(){
     }
 
     /* Shared escape helper */
-    function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+    function _esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
     /* Sponsorship buttons HTML — idPrefix keeps IDs unique per context */
     function _sponsorButtonsHTML(idPrefix){
@@ -4414,7 +4414,7 @@ if (!isAdmin){
       const teamSet = new Set();
       jerseysArr.forEach(j=>{
         const team = String(j.team||'').trim();
-        const num  = String(j.number||'').trim();
+        const num  = String((j.number==null?'':j.number)).trim();
         const its  = String(j.its||'').trim();
         const name = String(j.name||'').trim();
         if (!its || !num) return;
@@ -4660,7 +4660,7 @@ layout(node);
           .sort((a,b)=> String(a.team||'').localeCompare(String(b.team||'')) || Number(a.number||0)-Number(b.number||0))
           .map(j=>{
             const team = String(j.team||'').trim();
-            const num  = String(j.number||'').trim();
+            const num  = String((j.number==null?'':j.number)).trim();
             const nm   = String(j.name||'').trim();
             return '<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:6px 0">'+
                    '<div>'+esc(num)+' '+esc(team||'')+' - '+esc(nm||'')+'</div>'+
@@ -4783,7 +4783,7 @@ layout(node);
           const its  = String(r.its||'');
           const meta = itsToMeta[its] || {};
           const team = meta.team || '';
-          const num  = meta.number || '';
+          const num  = (meta.number==null?'':meta.number);
           const name = meta.name || '';
           const when = r.time || '';
           const g    = String(r.game || state.tmp.stat_game || '');
@@ -4816,7 +4816,7 @@ layout(node);
         const its  = String(r.its||'');
         const meta = itsToMeta[its] || {};
         const team = meta.team || '';
-        const num  = meta.number || '';
+        const num  = (meta.number==null?'':meta.number);
         const name = meta.name || '';
         const when = r.time || _fmtTime(new Date());
 
@@ -5233,7 +5233,7 @@ function _expandPairwise(players, primaryKey, rawText){
 
         const lines = actions.map(a=>{
         const m = itsToMeta[a.its] || {};
-        return `${m.team||''} ${m.number||''} - ${m.name||''} — ${a.stat} (G${gameNum})`;
+        return `${m.team||''} ${(m.number==null?'':m.number)} - ${m.name||''} — ${a.stat} (G${gameNum})`;
         });
         const postEl = $('#st_posting');
         if (postEl) postEl.innerHTML = lines.map(esc).join('<br>');
@@ -5297,7 +5297,7 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
   window.pageStat = pageStat;
 
   // Utilities
-  function esc(s){ return String(s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
   function _statkit_makeRecognizer(){
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return null; const r = new SR(); r.lang = 'en-US'; r.interimResults = false; r.maxAlternatives = 1; return r;
@@ -5379,7 +5379,7 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
     return { list:list, fallback:fallback };
   }
   function playerLabel(j){
-    return [j.number, j.name, j.jerseyName].filter(function(x){ return String(x||'').trim(); }).join(' - ');
+    return [j.number, j.name, j.jerseyName].filter(function(x){ return String(x==null?'':x).trim() !== ''; }).join(' - ');
   }
   function playerSelect(id, label, roster, selectedIts){
     var opts = '<option value="">Select player…</option>' + roster.list.map(function(j){
