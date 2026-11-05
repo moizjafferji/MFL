@@ -505,6 +505,7 @@ var router = {
       case 'captains':        return '#/captains';
       case 'bid':             return '#/bid';
       case 'info':             return '#/info';
+      case 'scores':           return '#/scores';
       case 'landing':
       default:                return '#/landing';
     }
@@ -520,7 +521,7 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info'].includes(seg))
+    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info','scores'].includes(seg))
       return { page: seg };
 
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
@@ -560,7 +561,7 @@ var router = {
       const route = router.parse();
 
       // Gate protected pages if signed out
-const publicPages = new Set(['landing','create','edit','']); // keep only public pages here
+const publicPages = new Set(['landing','create','edit','','scores']); // keep only public pages here
 if (!state.user && !publicPages.has(route.page)) {
   // remember intended destination both in-memory and across reloads
   const desired = location.hash || router.normalize(route.page, route) || '#/landing';
@@ -4324,6 +4325,7 @@ if (!isAdmin){
       if(state.page==='captains') return pageCaptains();
       if(state.page==='bid')      return pageBid();
       if(state.page==='info')     return pageInfo();
+      if(state.page==='scores')   return pageScores();
       if(state.page==='qrcheck') return pageQrCheckin();
 
       if (state.page && state.page.startsWith('captain_')) {
@@ -5305,6 +5307,216 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
 /* =================== /STATKIT (client) =================== */
 
 </script>
+
+  <script id="SCORES">
+/* ===================== SCORES (client) — hidden page at #/scores ===================== */
+(function(){
+  var CODE_KEY = 'mfl_scores_code';
+  var TEAM_HEX = {
+    fuchsia:'#ff00ff', yellow:'#ffff00', gray:'#9ca3af', brown:'#b45309',
+    blue:'#1d4ed8', green:'#166534', pink:'#f472b6', black:'#111827',
+    teal:'#0d9488', orange:'#f59e0b', gold:'#806000', sky:'#7dd3fc',
+    purple:'#6b21a8', white:'#ffffff', red:'#ef4444', maroon:'#5c0a0a'
+  };
+  var S = { code:'', role:'', schedule:[], jerseys:[], scores:{} };
+
+  function teamKey(t){ return String(t||'').toLowerCase().replace(/\bteam\b/g,'').replace(/[^a-z0-9]/g,''); }
+  function hexFor(t){ return TEAM_HEX[teamKey(t)] || '#334155'; }
+  function getCode(){ try{ return sessionStorage.getItem(CODE_KEY)||''; }catch(_){ return ''; } }
+  function setCode(c){ try{ c ? sessionStorage.setItem(CODE_KEY,c) : sessionStorage.removeItem(CODE_KEY); }catch(_){} }
+
+  function pageScores(){
+    setDocTitle('Scores');
+    var saved = getCode();
+    if (saved) return loadWith(saved, true);
+    renderGate('');
+  }
+
+  /* ---- Access code screen ---- */
+  function renderGate(msg){
+    layout(el(
+      '<div class="card stack" style="max-width:460px;margin:0 auto">'+
+        '<div style="font-size:var(--fs-lg);font-weight:800">MFL Score Entry</div>'+
+        '<div class="muted tiny">Enter your access ITS.</div>'+
+        '<form id="sc_gate" class="stack">'+
+          '<input id="sc_code" class="input" placeholder="ITS (8 digits)" maxlength="8" inputmode="numeric" pattern="[0-9]*" type="password">'+
+          '<button class="btn" id="sc_go" type="submit">Continue</button>'+
+        '</form>'+
+        '<div class="tiny" id="sc_gate_err" style="color:var(--err)">'+_esc(msg||'')+'</div>'+
+      '</div>'
+    ));
+    var inp = document.getElementById('sc_code');
+    inp.addEventListener('input', function(){ this.value = this.value.replace(/\D+/g,'').slice(0,8); });
+    document.getElementById('sc_gate').addEventListener('submit', function(e){
+      e.preventDefault();
+      var c = (inp.value||'').trim();
+      if (!/^\d{8}$/.test(c)){ document.getElementById('sc_gate_err').textContent = 'ITS must be 8 digits.'; return; }
+      var b = document.getElementById('sc_go'); b.disabled = true; b.textContent = 'Checking…';
+      loadWith(c, false);
+    });
+  }
+
+  function loadWith(code, silent){
+    if (silent) showLoading('Loading score entry…');
+    gs('api_scores_bootstrap', code).then(function(res){
+      if (!res || !res.ok){ setCode(''); renderGate((res && res.error) || 'Invalid access code.'); return; }
+      setCode(code);
+      S.code = code; S.role = res.role; S.schedule = res.schedule || [];
+      S.jerseys = res.jerseys || []; S.scores = res.scores || {};
+      renderForm('');
+    }).catch(function(e){
+      renderGate((e && e.message) || 'Could not connect. Try again.');
+    });
+  }
+
+  /* ---- Helpers ---- */
+  function rosterFor(team){
+    var k = teamKey(team);
+    var list = S.jerseys.filter(function(j){ return teamKey(j.team) === k; });
+    var fallback = false;
+    if (!list.length){ list = S.jerseys.slice(); fallback = true; }
+    list.sort(function(a,b){ return (Number(a.number)||0) - (Number(b.number)||0) || String(a.name).localeCompare(String(b.name)); });
+    return { list:list, fallback:fallback };
+  }
+  function playerLabel(j){
+    return [j.number, j.name, j.jerseyName].filter(function(x){ return String(x||'').trim(); }).join(' - ');
+  }
+  function playerSelect(id, label, roster, selectedIts){
+    var opts = '<option value="">Select player…</option>' + roster.list.map(function(j){
+      return '<option value="'+_esc(j.its)+'"'+(String(selectedIts)===String(j.its)?' selected':'')+'>'+_esc(playerLabel(j))+'</option>';
+    }).join('');
+    return '<div class="stack" style="gap:6px"><label class="label">'+_esc(label)+'</label>'+
+           '<select id="'+id+'" class="input">'+opts+'</select></div>';
+  }
+  function gameOptLabel(g){
+    var done = S.scores[String(g.game)] && S.scores[String(g.game)].homeScore !== '' ? '✓ ' : '';
+    return done + 'Game '+g.game+' — '+g.day+' '+g.time+' · Field '+g.field+' — '+g.home+' vs '+g.away;
+  }
+  function teamChip(t){
+    var hex = hexFor(t);
+    return '<span style="display:inline-flex;align-items:center;gap:8px;font-weight:800">'+
+      '<span style="width:16px;height:16px;border-radius:50%;background:'+hex+';border:1px solid rgba(255,255,255,.35)"></span>'+_esc(t)+'</span>';
+  }
+
+  /* ---- Main form ---- */
+  function renderForm(flash, keepGame){
+    var isAdmin = S.role === 'admin';
+    var gameSel = keepGame || (state.tmp && state.tmp.scores_game) || '';
+
+    var root = el(
+      '<div class="stack">'+
+        '<div class="card stack">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+            '<div style="font-size:var(--fs-lg);font-weight:800">Score Entry <span class="badge '+(isAdmin?'ok':'warn')+'">'+(isAdmin?'Admin':'Ref')+'</span></div>'+
+            '<button class="btn secondary sm" id="sc_out">Exit</button>'+
+          '</div>'+
+          '<div class="stack" style="gap:6px"><label class="label">Game</label>'+
+            '<select id="sc_game" class="input"><option value="">Select a game…</option>'+
+              S.schedule.map(function(g){
+                return '<option value="'+g.game+'"'+(String(gameSel)===String(g.game)?' selected':'')+'>'+_esc(gameOptLabel(g))+'</option>';
+              }).join('')+
+            '</select></div>'+
+          '<div class="tiny" id="sc_flash" style="color:var(--ok)">'+_esc(flash||'')+'</div>'+
+        '</div>'+
+        '<div id="sc_body" class="stack"></div>'+
+      '</div>'
+    );
+    layout(root);
+
+    document.getElementById('sc_out').onclick = function(){ setCode(''); S = { code:'', role:'', schedule:[], jerseys:[], scores:{} }; renderGate(''); };
+    var sel = document.getElementById('sc_game');
+    sel.addEventListener('change', function(){
+      state.tmp = state.tmp || {}; state.tmp.scores_game = sel.value;
+      document.getElementById('sc_flash').textContent = '';
+      renderGame(sel.value);
+    });
+    if (gameSel) renderGame(gameSel);
+  }
+
+  function renderGame(gameNum){
+    var body = document.getElementById('sc_body');
+    if (!gameNum){ body.innerHTML = ''; return; }
+    var g = S.schedule.filter(function(x){ return String(x.game) === String(gameNum); })[0];
+    if (!g){ body.innerHTML = ''; return; }
+    var ex = S.scores[String(g.game)] || {};
+    var isAdmin = S.role === 'admin';
+    var hr = rosterFor(g.home), ar = rosterFor(g.away);
+
+    function teamCard(side, team, roster){
+      var isHome = side === 'home';
+      var pre = isHome ? 'home' : 'away';
+      var hex = hexFor(team);
+      return '<div class="card stack" style="border-left:6px solid '+hex+'">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+          teamChip(team)+'<span class="tiny muted">'+(isHome?'Home':'Away')+'</span>'+
+        '</div>'+
+        (roster.fallback ? '<div class="tiny" style="color:var(--warn)">No Jerseys rows matched this team — showing all players.</div>' : '')+
+        '<div class="stack" style="gap:6px"><label class="label">'+(isHome?'Home':'Away')+' Score</label>'+
+          '<input id="sc_'+pre+'_score" class="input" type="number" min="0" step="1" inputmode="numeric" value="'+_esc(ex[pre+'Score']||'')+'"></div>'+
+        (isAdmin
+          ? playerSelect('sc_'+pre+'_off', 'Game Ball — '+(isHome?'Home':'Away')+' Offensive', roster, ex[pre+'Off']||'')+
+            playerSelect('sc_'+pre+'_def', 'Game Ball — '+(isHome?'Home':'Away')+' Defensive', roster, ex[pre+'Def']||'')
+          : playerSelect('sc_'+pre+'_player', 'Game Ball — '+(isHome?'Home':'Away')+' Player', roster, ex[pre+'Player']||''))+
+      '</div>';
+    }
+
+    body.innerHTML =
+      '<div class="card stack">'+
+        '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:var(--fs-md)">'+
+          teamChip(g.home)+'<span class="muted">vs</span>'+teamChip(g.away)+
+        '</div>'+
+        '<div class="tiny muted">Game '+g.game+' · '+g.day+' '+g.time+' · Field '+g.field+
+          (ex.homeScore !== undefined && ex.homeScore !== '' ? ' · Already recorded: '+_esc(ex.homeScore)+'–'+_esc(ex.awayScore) : '')+
+        '</div>'+
+      '</div>'+
+      '<div class="row">'+
+        '<div class="col">'+teamCard('home', g.home, hr)+'</div>'+
+        '<div class="col">'+teamCard('away', g.away, ar)+'</div>'+
+      '</div>'+
+      '<div class="card stack">'+
+        '<button class="btn" id="sc_save">Save Game '+g.game+'</button>'+
+        '<div class="tiny" id="sc_err" style="color:var(--err)"></div>'+
+      '</div>';
+
+    ['sc_home_score','sc_away_score'].forEach(function(id){
+      document.getElementById(id).addEventListener('input', function(){ this.value = this.value.replace(/\D+/g,'').slice(0,3); });
+    });
+
+    document.getElementById('sc_save').onclick = function(){
+      var btn = this, err = document.getElementById('sc_err');
+      err.textContent = '';
+      function v(id){ var n = document.getElementById(id); return n ? String(n.value||'').trim() : ''; }
+      var p = { game: g.game, homeScore: v('sc_home_score'), awayScore: v('sc_away_score') };
+      if (isAdmin){
+        p.homeOff = v('sc_home_off'); p.homeDef = v('sc_home_def');
+        p.awayOff = v('sc_away_off'); p.awayDef = v('sc_away_def');
+      } else {
+        p.homePlayer = v('sc_home_player'); p.awayPlayer = v('sc_away_player');
+      }
+      if (p.homeScore === '' || p.awayScore === ''){ err.textContent = 'Enter both scores.'; return; }
+      var balls = isAdmin ? ['homeOff','homeDef','awayOff','awayDef'] : ['homePlayer','awayPlayer'];
+      for (var i=0;i<balls.length;i++){ if (!p[balls[i]]){ err.textContent = 'Please choose every game ball.'; return; } }
+
+      var already = ex.homeScore !== undefined && ex.homeScore !== '';
+      var msg = (already ? 'Game '+g.game+' already has a score ('+ex.homeScore+'–'+ex.awayScore+'). Overwrite with ' : 'Save Game '+g.game+': ')+
+                g.home+' '+p.homeScore+' – '+p.awayScore+' '+g.away+'?';
+      if (!confirm(msg)) return;
+
+      withClickLock('scores:'+g.game, btn, 'Saving…', function(done){
+        gs('api_scores_save', S.code, p).then(function(r){
+          done();
+          if (!r || !r.ok){ err.textContent = (r && r.error) || 'Save failed.'; return; }
+          S.scores = r.scores || S.scores;
+          renderForm('✓ Game '+g.game+' saved: '+g.home+' '+p.homeScore+' – '+p.awayScore+' '+g.away, String(g.game));
+        }).catch(function(e){ done(); err.textContent = (e && e.message) || 'Save failed.'; });
+      });
+    };
+  }
+
+  window.pageScores = pageScores;
+})();
+/* =================== /SCORES (client) =================== */
+  </script>
 
 </body>
 </html>
