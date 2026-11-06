@@ -506,6 +506,9 @@ var router = {
       case 'bid':             return '#/bid';
       case 'info':             return '#/info';
       case 'scores':           return '#/scores';
+      case 'scoreinput':       return '#/scoreinput';
+      case 'mvp':              return '#/mvp';
+      case 'playoffs':         return '#/playoffs';
       case 'landing':
       default:                return '#/landing';
     }
@@ -521,7 +524,7 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info','scores'].includes(seg))
+    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info','scores','scoreinput','mvp','playoffs'].includes(seg))
       return { page: seg };
 
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
@@ -561,7 +564,7 @@ var router = {
       const route = router.parse();
 
       // Gate protected pages if signed out
-const publicPages = new Set(['landing','create','edit','','scores']); // keep only public pages here
+const publicPages = new Set(['landing','create','edit','']); // keep only public pages here
 if (!state.user && !publicPages.has(route.page)) {
   // remember intended destination both in-memory and across reloads
   const desired = location.hash || router.normalize(route.page, route) || '#/landing';
@@ -813,6 +816,10 @@ function showLoading(text){
       receiptsFinalizeNow:function(its, eventId, cb, eb){ callServer('Receipts_finalizeNow', [its, eventId], cb, eb, 'api_receipts_finalizeNow'); }
     };
 
+    /* Admins-tab roles that only grant Score Input / Playoffs (not Events/Receipts/Stat Tracker) */
+    var SCORE_ROLE_SPORTS = ['ref scores','admin scores','playoffs'];
+    function _isScoreRole_(s){ return SCORE_ROLE_SPORTS.indexOf(String(s||'').trim().toLowerCase()) >= 0; }
+
     /* ===================== LEFT NAV ===================== */
     function buildNav(){
       var nav = $('#nav'); if (!nav) return;
@@ -846,21 +853,29 @@ function showLoading(text){
       navItem('Balance','balance', { test: ()=> !!state.user });
       navItem('Calendar','calendar', { test: ()=> !!state.user });
       navItem('Teams','teams',       { test: ()=> !!state.user });
+      navItem('Scores','scores',     { test: ()=> !!state.user });
       navItem('Jersey','jersey',     { test: ()=> !!state.user });
       navItem('Sponsor','sponsor',   { test: ()=> !!state.user });
       // navItem('Captains','captains', { test: ()=> !!state.user }); // HIDDEN — reactivate next season
 
       // Admin items (Events/Receipts/Stat Tracker)
-var hasAdminSports = (state.admin && state.admin.adminSports && state.admin.adminSports.length) ? true : false;
-if (state.user && hasAdminSports){
+var _allAdminSports = (state.admin && state.admin.adminSports) || [];
+var hasAdminSports = _allAdminSports.some(function(s){ return !_isScoreRole_(s); }); // real sport admins
+var hasPlayoffs    = _allAdminSports.some(function(s){ return String(s||'').trim().toLowerCase()==='playoffs'; });
+var hasScoreRole   = _allAdminSports.some(function(s){ return _isScoreRole_(s) && String(s||'').trim().toLowerCase()!=='playoffs'; }); // Ref Scores / Admin Scores
+if (state.user && (hasAdminSports || hasScoreRole || hasPlayoffs)){
   nav.appendChild(el('<div class="nav-sep"></div>'));
-  navItem('Events','admin_events');
-  navItem('Receipts','admin_receipts');
+  if (hasAdminSports){
+    navItem('Events','admin_events');
+    navItem('Receipts','admin_receipts');
 
-  // >>> STATKIT-NAV-START
-  // Visible to admins; routes to #/stat (Stat Tracker)
-  navItem('Stat Tracker','stat');
-  // >>> STATKIT-NAV-END
+    // >>> STATKIT-NAV-START
+    // Visible to admins; routes to #/stat (Stat Tracker)
+    navItem('Stat Tracker','stat');
+    // >>> STATKIT-NAV-END
+  }
+  if (hasScoreRole) navItem('Score Input','scoreinput');
+  if (hasPlayoffs)  navItem('Playoffs','playoffs');
 }
 
 // Captain tabs from bootstrap (independent of normal admin)
@@ -3148,7 +3163,7 @@ function actDropout(eventId, its, btn){
       };
 
       const sportSel = $('#ae_sport');
-      (state.admin.adminSports||[]).forEach(sp=>{ const o=document.createElement('option'); o.value=sp; o.textContent=sp; sportSel.appendChild(o); });
+      (state.admin.adminSports||[]).filter(sp=>!_isScoreRole_(sp)).forEach(sp=>{ const o=document.createElement('option'); o.value=sp; o.textContent=sp; sportSel.appendChild(o); });
 
       const dl=$('#addr_list');
       (state.admin.pastAddresses||[]).forEach(a=>{ const o=document.createElement('option'); o.value=a; dl.appendChild(o); });
@@ -4300,6 +4315,18 @@ if (!isAdmin){
         '</table>';
     }
 
+    /* Pages defined in later <script> blocks (Stat Tracker, Scores, MVP) may not exist yet
+       when a deep link is opened. Wait for the page to finish loading instead of crashing. */
+    function _callLatePage_(name){
+      if (typeof window[name] === 'function') return window[name]();
+      showLoading('Loading…');
+      if (document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', function(){
+          if (typeof window[name] === 'function') render();
+        }, { once:true });
+      }
+    }
+
     /* ===================== ROUTER + RENDER ===================== */
     function render(){
       buildNav();
@@ -4321,11 +4348,14 @@ if (!isAdmin){
       if(state.page==='admin_receipts') return pageAdminReceipts();
       if(state.page==='admin_ci') return pageAdminCI();
 
-      if(state.page==='stat') return pageStat();
+      if(state.page==='stat') return _callLatePage_('pageStat');
       if(state.page==='captains') return pageCaptains();
       if(state.page==='bid')      return pageBid();
       if(state.page==='info')     return pageInfo();
-      if(state.page==='scores')   return pageScores();
+      if(state.page==='scores')   return _callLatePage_('pageScores');
+      if(state.page==='scoreinput') return _callLatePage_('pageScoreInput');
+      if(state.page==='mvp')      return _callLatePage_('pageMvp');
+      if(state.page==='playoffs') return _callLatePage_('pagePlayoffs');
       if(state.page==='qrcheck') return pageQrCheckin();
 
       if (state.page && state.page.startsWith('captain_')) {
@@ -5308,68 +5338,50 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
 
 </script>
 
-  <script id="SCORES">
-/* ===================== SCORES (client) — hidden page at #/scores ===================== */
+<script id="SCORES">
+/* ===================== SCORES + MVP (client) =====================
+   #/scoreinput  Score Input  — Admins tab "Ref Scores" / "Admin Scores"
+   #/scores      Public scores — all signed-in users
+   #/mvp         Hidden MVP voting — all signed-in users
+*/
 (function(){
-  var CODE_KEY = 'mfl_scores_code';
   var TEAM_HEX = {
     fuchsia:'#ff00ff', yellow:'#ffff00', gray:'#9ca3af', brown:'#b45309',
     blue:'#1d4ed8', green:'#166534', pink:'#f472b6', black:'#111827',
     teal:'#0d9488', orange:'#f59e0b', gold:'#806000', sky:'#7dd3fc',
     purple:'#6b21a8', white:'#ffffff', red:'#ef4444', maroon:'#5c0a0a'
   };
-  var S = { code:'', role:'', schedule:[], jerseys:[], scores:{} };
-
   function teamKey(t){ return String(t||'').toLowerCase().replace(/\bteam\b/g,'').replace(/[^a-z0-9]/g,''); }
   function hexFor(t){ return TEAM_HEX[teamKey(t)] || '#334155'; }
-  function getCode(){ try{ return sessionStorage.getItem(CODE_KEY)||''; }catch(_){ return ''; } }
-  function setCode(c){ try{ c ? sessionStorage.setItem(CODE_KEY,c) : sessionStorage.removeItem(CODE_KEY); }catch(_){} }
+  function dot(t){ return '<span style="flex:0 0 auto;width:14px;height:14px;border-radius:50%;background:'+hexFor(t)+';border:1px solid rgba(255,255,255,.35)"></span>'; }
+  function teamChip(t){
+    return '<span style="display:inline-flex;align-items:center;gap:8px;font-weight:800">'+dot(t)+_esc(t)+'</span>';
+  }
+  function hasVal(v){ return v !== undefined && v !== null && String(v) !== ''; }
+  function errCard(msg){ layout(el('<div class="card" style="color:var(--err)">'+_esc(msg)+'</div>')); }
+  function dayName(d){ return d === 'Sat' ? 'Saturday' : d === 'Sun' ? 'Sunday' : d; }
 
-  function pageScores(){
-    setDocTitle('Scores');
-    var saved = getCode();
-    if (saved) return loadWith(saved, true);
-    renderGate('');
+  /* ================================================================
+     SCORE INPUT
+     ================================================================ */
+  var S = { roles:[], role:'', schedule:[], jerseys:[], scores:{} };
+
+  function pageScoreInput(){
+    if (!guard()) return;
+    setDocTitle('Score Input');
+    showLoading('Loading score input…');
+    gs('api_scores_bootstrap', state.user.its).then(function(res){
+      if (!res || !res.ok){ errCard((res && res.error) || 'You don’t have access to Score Input.'); return; }
+      S.roles = res.roles || [];
+      var keep = state.tmp && state.tmp.scores_role;
+      S.role = (keep && S.roles.indexOf(keep) >= 0) ? keep : (S.roles.indexOf('admin') >= 0 ? 'admin' : S.roles[0]);
+      S.schedule = res.schedule || [];
+      S.jerseys  = res.jerseys  || [];
+      S.scores   = res.scores   || {};
+      renderInput('');
+    }).catch(function(e){ errCard((e && e.message) || 'Failed to load Score Input.'); });
   }
 
-  /* ---- Access code screen ---- */
-  function renderGate(msg){
-    layout(el(
-      '<div class="card stack" style="max-width:460px;margin:0 auto">'+
-        '<div style="font-size:var(--fs-lg);font-weight:800">MFL Score Entry</div>'+
-        '<div class="muted tiny">Enter your access ITS.</div>'+
-        '<form id="sc_gate" class="stack">'+
-          '<input id="sc_code" class="input" placeholder="ITS (8 digits)" maxlength="8" inputmode="numeric" pattern="[0-9]*" type="password">'+
-          '<button class="btn" id="sc_go" type="submit">Continue</button>'+
-        '</form>'+
-        '<div class="tiny" id="sc_gate_err" style="color:var(--err)">'+_esc(msg||'')+'</div>'+
-      '</div>'
-    ));
-    var inp = document.getElementById('sc_code');
-    inp.addEventListener('input', function(){ this.value = this.value.replace(/\D+/g,'').slice(0,8); });
-    document.getElementById('sc_gate').addEventListener('submit', function(e){
-      e.preventDefault();
-      var c = (inp.value||'').trim();
-      if (!/^\d{8}$/.test(c)){ document.getElementById('sc_gate_err').textContent = 'ITS must be 8 digits.'; return; }
-      var b = document.getElementById('sc_go'); b.disabled = true; b.textContent = 'Checking…';
-      loadWith(c, false);
-    });
-  }
-
-  function loadWith(code, silent){
-    if (silent) showLoading('Loading score entry…');
-    gs('api_scores_bootstrap', code).then(function(res){
-      if (!res || !res.ok){ setCode(''); renderGate((res && res.error) || 'Invalid access code.'); return; }
-      setCode(code);
-      S.code = code; S.role = res.role; S.schedule = res.schedule || [];
-      S.jerseys = res.jerseys || []; S.scores = res.scores || {};
-      renderForm('');
-    }).catch(function(e){
-      renderGate((e && e.message) || 'Could not connect. Try again.');
-    });
-  }
-
-  /* ---- Helpers ---- */
   function rosterFor(team){
     var k = teamKey(team);
     var list = S.jerseys.filter(function(j){ return teamKey(j.team) === k; });
@@ -5389,41 +5401,49 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
            '<select id="'+id+'" class="input">'+opts+'</select></div>';
   }
   function gameOptLabel(g){
-    var done = S.scores[String(g.game)] && S.scores[String(g.game)].homeScore !== '' ? '✓ ' : '';
-    return done + 'Game '+g.game+' — '+g.day+' '+g.time+' · Field '+g.field+' — '+g.home+' vs '+g.away;
-  }
-  function teamChip(t){
-    var hex = hexFor(t);
-    return '<span style="display:inline-flex;align-items:center;gap:8px;font-weight:800">'+
-      '<span style="width:16px;height:16px;border-radius:50%;background:'+hex+';border:1px solid rgba(255,255,255,.35)"></span>'+_esc(t)+'</span>';
+    var done = S.scores[String(g.game)] && hasVal(S.scores[String(g.game)].homeScore) ? '✓ ' : '';
+    var rnd = g.round ? g.round+': ' : '';
+    if (!g.home || !g.away) return 'Game '+g.game+' — '+g.day+' '+g.time+' · Field '+g.field+' — '+rnd+g.homeSlot+' vs '+g.awaySlot+' (matchup not set)';
+    return done + 'Game '+g.game+' — '+g.day+' '+g.time+' · Field '+g.field+' — '+rnd+g.home+' vs '+g.away;
   }
 
-  /* ---- Main form ---- */
-  function renderForm(flash, keepGame){
+  function renderInput(flash, keepGame){
     var isAdmin = S.role === 'admin';
     var gameSel = keepGame || (state.tmp && state.tmp.scores_game) || '';
+    var roleToggle = S.roles.length > 1
+      ? '<div style="display:flex;gap:6px">'+
+          ['ref','admin'].map(function(r){
+            return '<button class="btn sm '+(S.role===r?'':'secondary')+'" data-role="'+r+'">'+(r==='admin'?'Admin':'Ref')+'</button>';
+          }).join('')+
+        '</div>'
+      : '<span class="badge '+(isAdmin?'ok':'warn')+'">'+(isAdmin?'Admin':'Ref')+'</span>';
 
-    var root = el(
+    layout(el(
       '<div class="stack">'+
         '<div class="card stack">'+
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
-            '<div style="font-size:var(--fs-lg);font-weight:800">Score Entry <span class="badge '+(isAdmin?'ok':'warn')+'">'+(isAdmin?'Admin':'Ref')+'</span></div>'+
-            '<button class="btn secondary sm" id="sc_out">Exit</button>'+
+            '<div style="font-size:var(--fs-lg);font-weight:800">Score Input</div>'+ roleToggle +
           '</div>'+
           '<div class="stack" style="gap:6px"><label class="label">Game</label>'+
             '<select id="sc_game" class="input"><option value="">Select a game…</option>'+
               S.schedule.map(function(g){
-                return '<option value="'+g.game+'"'+(String(gameSel)===String(g.game)?' selected':'')+'>'+_esc(gameOptLabel(g))+'</option>';
+                var off = (!g.home || !g.away);
+                return '<option value="'+g.game+'"'+(off?' disabled':'')+(!off && String(gameSel)===String(g.game)?' selected':'')+'>'+_esc(gameOptLabel(g))+'</option>';
               }).join('')+
             '</select></div>'+
           '<div class="tiny" id="sc_flash" style="color:var(--ok)">'+_esc(flash||'')+'</div>'+
         '</div>'+
         '<div id="sc_body" class="stack"></div>'+
       '</div>'
-    );
-    layout(root);
+    ));
 
-    document.getElementById('sc_out').onclick = function(){ setCode(''); S = { code:'', role:'', schedule:[], jerseys:[], scores:{} }; renderGate(''); };
+    document.querySelectorAll('[data-role]').forEach(function(b){
+      b.onclick = function(){
+        S.role = b.getAttribute('data-role');
+        state.tmp = state.tmp || {}; state.tmp.scores_role = S.role;
+        renderInput('', document.getElementById('sc_game').value);
+      };
+    });
     var sel = document.getElementById('sc_game');
     sel.addEventListener('change', function(){
       state.tmp = state.tmp || {}; state.tmp.scores_game = sel.value;
@@ -5437,7 +5457,7 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
     var body = document.getElementById('sc_body');
     if (!gameNum){ body.innerHTML = ''; return; }
     var g = S.schedule.filter(function(x){ return String(x.game) === String(gameNum); })[0];
-    if (!g){ body.innerHTML = ''; return; }
+    if (!g || !g.home || !g.away){ body.innerHTML = ''; return; }
     var ex = S.scores[String(g.game)] || {};
     var isAdmin = S.role === 'admin';
     var hr = rosterFor(g.home), ar = rosterFor(g.away);
@@ -5445,28 +5465,29 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
     function teamCard(side, team, roster){
       var isHome = side === 'home';
       var pre = isHome ? 'home' : 'away';
-      var hex = hexFor(team);
-      return '<div class="card stack" style="border-left:6px solid '+hex+'">'+
+      var HA = isHome ? 'Home' : 'Away';
+      return '<div class="card stack" style="border-left:6px solid '+hexFor(team)+'">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
-          teamChip(team)+'<span class="tiny muted">'+(isHome?'Home':'Away')+'</span>'+
+          teamChip(team)+'<span class="tiny muted">'+HA+'</span>'+
         '</div>'+
         (roster.fallback ? '<div class="tiny" style="color:var(--warn)">No Jerseys rows matched this team — showing all players.</div>' : '')+
-        '<div class="stack" style="gap:6px"><label class="label">'+(isHome?'Home':'Away')+' Score</label>'+
-          '<input id="sc_'+pre+'_score" class="input" type="number" min="0" step="1" inputmode="numeric" value="'+_esc(ex[pre+'Score']||'')+'"></div>'+
+        '<div class="stack" style="gap:6px"><label class="label">'+HA+' Score</label>'+
+          '<input id="sc_'+pre+'_score" class="input" type="number" min="0" step="1" inputmode="numeric" value="'+_esc(hasVal(ex[pre+'Score'])?ex[pre+'Score']:'')+'"></div>'+
         (isAdmin
-          ? playerSelect('sc_'+pre+'_off', 'Game Ball — '+(isHome?'Home':'Away')+' Offensive', roster, ex[pre+'Off']||'')+
-            playerSelect('sc_'+pre+'_def', 'Game Ball — '+(isHome?'Home':'Away')+' Defensive', roster, ex[pre+'Def']||'')
-          : playerSelect('sc_'+pre+'_player', 'Game Ball — '+(isHome?'Home':'Away')+' Player', roster, ex[pre+'Player']||''))+
+          ? playerSelect('sc_'+pre+'_off', 'Game Ball — '+HA+' Offensive', roster, ex[pre+'Off']||'')+
+            playerSelect('sc_'+pre+'_def', 'Game Ball — '+HA+' Defensive', roster, ex[pre+'Def']||'')
+          : playerSelect('sc_'+pre+'_player', 'Game Ball — '+HA+' Player', roster, ex[pre+'Player']||''))+
       '</div>';
     }
 
+    var already = hasVal(ex.homeScore);
     body.innerHTML =
       '<div class="card stack">'+
         '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:var(--fs-md)">'+
           teamChip(g.home)+'<span class="muted">vs</span>'+teamChip(g.away)+
         '</div>'+
-        '<div class="tiny muted">Game '+g.game+' · '+g.day+' '+g.time+' · Field '+g.field+
-          (ex.homeScore !== undefined && ex.homeScore !== '' ? ' · Already recorded: '+_esc(ex.homeScore)+'–'+_esc(ex.awayScore) : '')+
+        '<div class="tiny muted">'+(g.round ? _esc(g.round)+' · ' : '')+'Game '+g.game+' · '+g.day+' '+g.time+' · Field '+g.field+
+          (already ? ' · Already recorded: '+_esc(ex.homeScore)+'–'+_esc(ex.awayScore) : '')+
         '</div>'+
       '</div>'+
       '<div class="row">'+
@@ -5497,25 +5518,297 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
       var balls = isAdmin ? ['homeOff','homeDef','awayOff','awayDef'] : ['homePlayer','awayPlayer'];
       for (var i=0;i<balls.length;i++){ if (!p[balls[i]]){ err.textContent = 'Please choose every game ball.'; return; } }
 
-      var already = ex.homeScore !== undefined && ex.homeScore !== '';
       var msg = (already ? 'Game '+g.game+' already has a score ('+ex.homeScore+'–'+ex.awayScore+'). Overwrite with ' : 'Save Game '+g.game+': ')+
                 g.home+' '+p.homeScore+' – '+p.awayScore+' '+g.away+'?';
       if (!confirm(msg)) return;
 
       withClickLock('scores:'+g.game, btn, 'Saving…', function(done){
-        gs('api_scores_save', S.code, p).then(function(r){
+        gs('api_scores_save', state.user.its, S.role, p).then(function(r){
           done();
           if (!r || !r.ok){ err.textContent = (r && r.error) || 'Save failed.'; return; }
           S.scores = r.scores || S.scores;
-          renderForm('✓ Game '+g.game+' saved: '+g.home+' '+p.homeScore+' – '+p.awayScore+' '+g.away, String(g.game));
+          renderInput('✓ Game '+g.game+' saved: '+g.home+' '+p.homeScore+' – '+p.awayScore+' '+g.away, String(g.game));
         }).catch(function(e){ done(); err.textContent = (e && e.message) || 'Save failed.'; });
       });
     };
   }
 
-  window.pageScores = pageScores;
+  /* ================================================================
+     PUBLIC SCORES
+     ================================================================ */
+  function pageScores(){
+    if (!guard()) return;
+    setDocTitle('Scores');
+    showLoading('Loading scores…');
+    gs('api_scores_public').then(function(res){
+      if (!res || !res.ok){ errCard((res && res.error) || 'Failed to load scores.'); return; }
+      renderPublic(res);
+    }).catch(function(e){ errCard((e && e.message) || 'Failed to load scores.'); });
+  }
+
+  function renderPublic(res){
+    var sched = res.schedule || [], sc = res.scores || {};
+    var showBalls = !!res.showGameBalls, balls = res.gameBalls || {};
+    state.tmp = state.tmp || {};
+    var filter = state.tmp.scores_filter || '';
+
+    var teams = Array.from(new Set(sched.reduce(function(a,g){ if (g.home) a.push(g.home); if (g.away) a.push(g.away); return a; }, []))).sort();
+    var played = sched.filter(function(g){ return sc[g.game] && hasVal(sc[g.game].homeScore); }).length;
+
+    layout(el(
+      '<div class="stack">'+
+        '<div class="card stack">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+            '<div style="font-size:var(--fs-lg);font-weight:800">Scores</div>'+
+            '<button class="btn secondary sm" id="ps_refresh">Refresh</button>'+
+          '</div>'+
+          '<div class="tiny muted">'+played+' of '+sched.length+' games final</div>'+
+          '<div class="stack" style="gap:6px"><label class="label">Filter by Team</label>'+
+            '<select id="ps_filter" class="input"><option value="">All Teams</option>'+
+              teams.map(function(t){ return '<option value="'+_esc(t)+'"'+(filter===t?' selected':'')+'>'+_esc(t)+'</option>'; }).join('')+
+            '</select></div>'+
+        '</div>'+
+        '<div id="ps_list" class="stack"></div>'+
+      '</div>'
+    ));
+
+    document.getElementById('ps_refresh').onclick = pageScores;
+    document.getElementById('ps_filter').addEventListener('change', function(){
+      state.tmp.scores_filter = this.value; filter = this.value; renderList();
+    });
+
+    function teamLine(team, score, isWinner, isFinal, slot){
+      if (!team){
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">'+
+          '<span class="muted" style="display:inline-flex;align-items:center;gap:8px">'+
+            '<span style="flex:0 0 auto;width:14px;height:14px;border-radius:50%;border:1px dashed var(--muted)"></span>'+_esc(slot||'TBD')+'</span>'+
+          '<span class="muted" style="font-size:var(--fs-lg);font-weight:800">—</span></div>';
+      }
+      var dim = isFinal && !isWinner ? 'opacity:.6;' : '';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;'+dim+'">'+
+        '<span style="display:inline-flex;align-items:center;gap:8px;min-width:0;font-weight:'+(isWinner?'800':'600')+'">'+
+          dot(team)+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_esc(team)+'</span></span>'+
+        '<span style="font-size:var(--fs-lg);font-weight:800;font-variant-numeric:tabular-nums">'+(isFinal ? _esc(score) : '—')+'</span>'+
+      '</div>';
+    }
+
+    /* Game balls block — only rendered when the server turns SHOW_PUBLIC_GAME_BALLS on */
+    function ballsHtml(g){
+      if (!showBalls) return '';
+      var b = balls[g.game] || {};
+      var rows = [
+        ['Player', b.homePlayer, b.awayPlayer],
+        ['Offensive', b.homeOff, b.awayOff],
+        ['Defensive', b.homeDef, b.awayDef]
+      ].filter(function(r){ return r[1] || r[2]; });
+      if (!rows.length) return '';
+      return '<div class="tiny" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);display:grid;grid-template-columns:auto 1fr 1fr;gap:4px 10px">'+
+        '<span class="muted">Game Balls</span><span class="muted">'+_esc(g.home)+'</span><span class="muted">'+_esc(g.away)+'</span>'+
+        rows.map(function(r){
+          return '<span class="muted">'+r[0]+'</span><span>'+_esc(r[1]||'—')+'</span><span>'+_esc(r[2]||'—')+'</span>';
+        }).join('')+
+      '</div>';
+    }
+
+    function renderList(){
+      var box = document.getElementById('ps_list');
+      var list = sched.filter(function(g){ return !filter || g.home === filter || g.away === filter; });
+      function groupOf(g){ return g.stage === 'Playoffs' ? 'Playoffs' : dayName(g.day); }
+      var days = [];
+      list.forEach(function(g){ var k = groupOf(g); if (days.indexOf(k) < 0) days.push(k); });
+
+      box.innerHTML = days.map(function(d){
+        var games = list.filter(function(g){ return groupOf(g) === d; });
+        return '<div class="card stack">'+
+          '<div class="label" style="font-size:var(--fs-sm);font-weight:700">'+_esc(d)+(d==='Playoffs'?' · Sunday':'')+'</div>'+
+          games.map(function(g){
+            var s = sc[g.game] || {};
+            var isFinal = hasVal(s.homeScore) && hasVal(s.awayScore);
+            var hs = Number(s.homeScore), as = Number(s.awayScore);
+            return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">'+
+              '<div class="tiny muted" style="margin-bottom:6px">'+(g.round ? '<b>'+_esc(g.round)+'</b> · ' : '')+'Game '+g.game+' · '+_esc(g.time)+' · Field '+_esc(g.field)+
+                (isFinal ? ' · <span style="color:var(--ok)">Final</span>' : '')+'</div>'+
+              '<div class="stack" style="gap:4px">'+
+                teamLine(g.home, s.homeScore, isFinal && hs > as, isFinal, g.homeSlot)+
+                teamLine(g.away, s.awayScore, isFinal && as > hs, isFinal, g.awaySlot)+
+              '</div>'+
+              ballsHtml(g)+
+            '</div>';
+          }).join('')+
+        '</div>';
+      }).join('') || '<div class="card muted">No games found.</div>';
+    }
+    renderList();
+  }
+
+  /* ================================================================
+     MVP VOTING (hidden page)
+     ================================================================ */
+  function ballsText(n){ n = Number(n)||0; return n + (n === 1 ? ' game ball' : ' game balls'); }
+
+  function pageMvp(){
+    if (!guard()) return;
+    setDocTitle('MVP');
+    showLoading('Loading MVP voting…');
+    gs('api_mvp_bootstrap', state.user.its).then(function(res){
+      if (!res || !res.ok){ errCard((res && res.error) || 'Failed to load MVP voting.'); return; }
+      if (res.myVote) return renderVoted(res.myVote);
+      renderMvpForm(res.awards || []);
+    }).catch(function(e){ errCard((e && e.message) || 'Failed to load MVP voting.'); });
+  }
+
+  function renderVoted(v){
+    layout(el(
+      '<div class="card stack">'+
+        '<div style="font-size:var(--fs-md);font-weight:700">✓ Votes Submitted</div>'+
+        '<div class="muted">You have already voted. Thank you!</div>'+
+        '<div class="label">Your Votes</div>'+
+        '<div class="stack" style="gap:6px">'+
+          Object.keys(v).filter(function(a){ return v[a]; }).map(function(a){
+            return '<div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--border);padding:6px 0">'+
+              '<span class="muted">'+_esc(a)+'</span><b style="text-align:right">'+_esc(v[a])+'</b></div>';
+          }).join('')+
+        '</div>'+
+      '</div>'
+    ));
+  }
+
+  function renderMvpForm(awards){
+    var root = el('<div class="stack"></div>');
+    root.appendChild(el(
+      '<div class="card stack">'+
+        '<div style="font-size:var(--fs-lg);font-weight:800">MVP Voting</div>'+
+        '<div class="muted">Pick one player for each award. Each name shows how many game balls they received. You can only vote once.</div>'+
+      '</div>'
+    ));
+    awards.forEach(function(a, i){
+      var body = a.candidates.length
+        ? '<select class="input mvp-sel" data-award="'+_esc(a.award)+'"><option value="">Select player…</option>'+
+            a.candidates.map(function(c){
+              return '<option value="'+_esc(c.name)+'">'+_esc(c.name)+' — '+ballsText(c.balls)+'</option>';
+            }).join('')+
+          '</select>'
+        : '<div class="tiny muted">No nominees listed yet.</div>';
+      root.appendChild(el('<div class="card stack"><div class="label" style="font-size:var(--fs-sm);font-weight:700">'+_esc(a.award)+'</div>'+body+'</div>'));
+    });
+    root.appendChild(el(
+      '<div class="card stack">'+
+        '<button class="btn" id="mvp_submit">Submit Votes</button>'+
+        '<div class="tiny" id="mvp_err" style="color:var(--err)"></div>'+
+      '</div>'
+    ));
+    layout(root);
+
+    document.getElementById('mvp_submit').onclick = function(){
+      var btn = this, err = document.getElementById('mvp_err');
+      err.textContent = '';
+      var picks = {}, missing = [];
+      document.querySelectorAll('.mvp-sel').forEach(function(s){
+        var a = s.getAttribute('data-award');
+        if (!s.value) missing.push(a); else picks[a] = s.value;
+      });
+      if (missing.length){ err.textContent = 'Please choose a player for: '+missing.join(', ')+'.'; return; }
+      if (!confirm('Submit your MVP votes? You can only vote once.')) return;
+
+      withClickLock('mvp:vote:'+state.user.its, btn, 'Submitting…', function(done){
+        gs('api_mvp_vote', state.user.its, picks).then(function(r){
+          done();
+          if (!r || !r.ok){ err.textContent = (r && r.error) || 'Submit failed.'; return; }
+          renderVoted(r.myVote || picks);
+        }).catch(function(e){ done(); err.textContent = (e && e.message) || 'Submit failed.'; });
+      });
+    };
+  }
+
+  /* ================================================================
+     PLAYOFFS SETUP (Admins tab sport "Playoffs")
+     ================================================================ */
+  function pagePlayoffs(){
+    if (!guard()) return;
+    setDocTitle('Playoffs');
+    showLoading('Loading playoffs…');
+    gs('api_playoffs_bootstrap', state.user.its).then(function(res){
+      if (!res || !res.ok){ errCard((res && res.error) || 'You don’t have access to Playoffs.'); return; }
+      renderPlayoffs(res, '');
+    }).catch(function(e){ errCard((e && e.message) || 'Failed to load playoffs.'); });
+  }
+
+  function renderPlayoffs(res, flash){
+    var games = res.games || [], teams = res.teams || [], scored = res.scored || {};
+    var rounds = [];
+    games.forEach(function(g){ if (rounds.indexOf(g.round) < 0) rounds.push(g.round); });
+
+    function teamSel(id, cur){
+      return '<select id="'+id+'" class="input"><option value="">Select team…</option>'+
+        teams.map(function(t){ return '<option value="'+_esc(t)+'"'+(cur===t?' selected':'')+'>'+_esc(t)+'</option>'; }).join('')+
+      '</select>';
+    }
+
+    layout(el(
+      '<div class="stack">'+
+        '<div class="card stack">'+
+          '<div style="font-size:var(--fs-lg);font-weight:800">Playoffs</div>'+
+          '<div class="muted">Set the Home and Away team for each playoff game. Once a game is set, score admins can enter its score and game balls.</div>'+
+          '<div class="tiny" style="color:var(--ok)">'+_esc(flash||'')+'</div>'+
+        '</div>'+
+        rounds.map(function(rd){
+          return '<div class="card stack">'+
+            '<div class="label" style="font-size:var(--fs-sm);font-weight:700">'+_esc(rd)+'</div>'+
+            games.filter(function(g){ return g.round === rd; }).map(function(g){
+              var sc = scored[String(g.game)];
+              return '<div class="stack" style="gap:8px;padding:10px 0;border-bottom:1px solid var(--border)">'+
+                '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
+                  '<b>Game '+g.game+'</b>'+
+                  '<span class="tiny muted">'+_esc(g.time)+' · Field '+_esc(g.field)+' · '+_esc(g.homeSlot)+' vs '+_esc(g.awaySlot)+'</span>'+
+                '</div>'+
+                (sc ? '<div class="tiny" style="color:var(--warn)">Score already entered: '+_esc(sc)+'</div>' : '')+
+                '<div class="row">'+
+                  '<div class="col stack" style="gap:6px"><label class="label">Home ('+_esc(g.homeSlot)+')</label>'+teamSel('po_h_'+g.game, g.home)+'</div>'+
+                  '<div class="col stack" style="gap:6px"><label class="label">Away ('+_esc(g.awaySlot)+')</label>'+teamSel('po_a_'+g.game, g.away)+'</div>'+
+                '</div>'+
+                '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+                  '<button class="btn sm" data-po="'+g.game+'">Save Game '+g.game+'</button>'+
+                  '<span class="tiny" id="po_err_'+g.game+'" style="color:var(--err)"></span>'+
+                '</div>'+
+              '</div>';
+            }).join('')+
+          '</div>';
+        }).join('')+
+      '</div>'
+    ));
+
+    document.querySelectorAll('[data-po]').forEach(function(btn){
+      btn.onclick = function(){
+        var gnum = btn.getAttribute('data-po');
+        var g = games.filter(function(x){ return String(x.game) === gnum; })[0];
+        var err = document.getElementById('po_err_'+gnum);
+        var home = document.getElementById('po_h_'+gnum).value;
+        var away = document.getElementById('po_a_'+gnum).value;
+        err.textContent = '';
+        if (!home || !away){ err.textContent = 'Choose both teams.'; return; }
+        if (home === away){ err.textContent = 'Home and Away must be different.'; return; }
+        if (g.home === home && g.away === away){ err.textContent = 'No change.'; return; }
+        var sc = scored[gnum];
+        var msg = 'Set Game '+gnum+': '+home+' vs '+away+'?' +
+          (sc ? '\n\nThis game already has a score ('+sc+'). The score and game balls will stay — re-enter them if the teams changed.' : '');
+        if (!confirm(msg)) return;
+        withClickLock('playoffs:'+gnum, btn, 'Saving…', function(done){
+          gs('api_playoffs_save', state.user.its, Number(gnum), home, away).then(function(r){
+            done();
+            if (!r || !r.ok){ err.textContent = (r && r.error) || 'Save failed.'; return; }
+            renderPlayoffs(r, '✓ Game '+gnum+' set: '+home+' vs '+away);
+          }).catch(function(e){ done(); err.textContent = (e && e.message) || 'Save failed.'; });
+        });
+      };
+    });
+  }
+
+  window.pagePlayoffs   = pagePlayoffs;
+  window.pageScoreInput = pageScoreInput;
+  window.pageScores     = pageScores;
+  window.pageMvp        = pageMvp;
 })();
-/* =================== /SCORES (client) =================== */
+/* =================== /SCORES + MVP (client) =================== */
   </script>
 
 </body>
