@@ -5678,14 +5678,14 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
     root.appendChild(el(
       '<div class="card stack">'+
         '<div style="font-size:var(--fs-lg);font-weight:800">MVP Voting</div>'+
-        '<div class="muted">Pick one player for each award. Each name shows how many game balls they received. You can only vote once.</div>'+
+        '<div class="muted">Pick one player for each award. You can only vote once.</div>'+
       '</div>'
     ));
     awards.forEach(function(a, i){
       var body = a.candidates.length
         ? '<select class="input mvp-sel" data-award="'+_esc(a.award)+'"><option value="">Select player…</option>'+
             a.candidates.map(function(c){
-              return '<option value="'+_esc(c.name)+'">'+_esc(c.name)+' — '+ballsText(c.balls)+'</option>';
+              return '<option value="'+_esc(c.name)+'">'+_esc(c.name)+'</option>';
             }).join('')+
           '</select>'
         : '<div class="tiny muted">No nominees listed yet.</div>';
