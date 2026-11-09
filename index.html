@@ -507,6 +507,7 @@ var router = {
       case 'info':             return '#/info';
       case 'scores':           return '#/scores';
       case 'standings':        return '#/standings';
+      case 'bracket':          return '#/bracket';
       case 'scoreinput':       return '#/scoreinput';
       case 'mvp':              return '#/mvp';
       case 'playoffs':         return '#/playoffs';
@@ -525,7 +526,7 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info','scores','standings','scoreinput','mvp','playoffs'].includes(seg))
+    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info','scores','standings','bracket','scoreinput','mvp','playoffs'].includes(seg))
       return { page: seg };
 
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
@@ -856,6 +857,7 @@ function showLoading(text){
       navItem('Teams','teams',       { test: ()=> !!state.user });
       navItem('Scores','scores',     { test: ()=> !!state.user });
       navItem('Standings','standings', { test: ()=> !!state.user });
+      navItem('Bracket','bracket',   { test: ()=> !!state.user });
       navItem('Jersey','jersey',     { test: ()=> !!state.user });
       navItem('Sponsor','sponsor',   { test: ()=> !!state.user });
       // navItem('Captains','captains', { test: ()=> !!state.user }); // HIDDEN — reactivate next season
@@ -4356,6 +4358,7 @@ if (!isAdmin){
       if(state.page==='info')     return pageInfo();
       if(state.page==='scores')   return _callLatePage_('pageScores');
       if(state.page==='standings') return _callLatePage_('pageStandings');
+      if(state.page==='bracket')  return _callLatePage_('pageBracket');
       if(state.page==='scoreinput') return _callLatePage_('pageScoreInput');
       if(state.page==='mvp')      return _callLatePage_('pageMvp');
       if(state.page==='playoffs') return _callLatePage_('pagePlayoffs');
@@ -5911,6 +5914,101 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
     document.getElementById('stn_refresh').onclick = pageStandings;
   }
 
+  /* ================================================================
+     BRACKET — playoff games 41–55 from the Scores tab
+     ================================================================ */
+  function pageBracket(){
+    if (!guard()) return;
+    setDocTitle('Bracket');
+    showLoading('Loading bracket…');
+    gs('api_scores_public').then(function(res){
+      if (!res || !res.ok){ errCard((res && res.error) || 'Failed to load bracket.'); return; }
+      renderBracket(res);
+    }).catch(function(e){ errCard((e && e.message) || 'Failed to load bracket.'); });
+  }
+
+  function renderBracket(res){
+    var sc = res.scores || {};
+    var games = (res.schedule || []).filter(function(g){ return g.stage === 'Playoffs'; });
+    var rounds = [];
+    games.forEach(function(g){ if (rounds.indexOf(g.round) < 0) rounds.push(g.round); });
+
+    function shortName(t){ return String(t||'').replace(/\s*Team$/i,''); }
+    function result(g){
+      var s = sc[g.game] || {};
+      var fin = hasVal(s.homeScore) && hasVal(s.awayScore) && g.home && g.away;
+      var hs = Number(s.homeScore), as = Number(s.awayScore);
+      return { fin:fin, hs:s.homeScore, as:s.awayScore,
+               winner: fin ? (hs > as ? g.home : as > hs ? g.away : '') : '' };
+    }
+    function slotRow(team, slot, score, r){
+      var isW = r.fin && r.winner === team, isL = r.fin && r.winner && r.winner !== team;
+      var left = team
+        ? '<span style="display:inline-flex;align-items:center;gap:7px;min-width:0">'+dot(team)+
+            '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:'+(isW?'800':'600')+'">'+_esc(shortName(team))+'</span>'+
+            '<span class="muted" style="font-size:var(--fs-xxxs)">'+_esc(/^[1-8][AB]$/.test(slot)?slot:'')+'</span></span>'
+        : '<span class="muted" style="display:inline-flex;align-items:center;gap:7px;min-width:0">'+
+            '<span style="flex:0 0 auto;width:14px;height:14px;border-radius:50%;border:1px dashed var(--muted)"></span>'+
+            '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_esc(slot||'TBD')+'</span></span>';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;'+(isL?'opacity:.55;':'')+'">'+
+        left+'<span style="font-weight:800;font-variant-numeric:tabular-nums">'+(r.fin?_esc(score):'')+'</span></div>';
+    }
+    function matchCard(g){
+      var r = result(g);
+      var champ = g.round === 'Championship';
+      return '<div style="border:1px solid '+(champ?'#f59e0b':'var(--border)')+';border-radius:12px;background:#0e1626;overflow:hidden">'+
+        '<div class="tiny muted" style="padding:5px 10px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:6px;white-space:nowrap">'+
+          '<span>Game '+g.game+(r.fin?' · <span style="color:var(--ok)">Final</span>':'')+'</span><span>'+_esc(g.time)+' · '+_esc(g.field)+'</span></div>'+
+        slotRow(g.home, g.homeSlot, r.hs, r)+
+        '<div style="height:1px;background:var(--border)"></div>'+
+        slotRow(g.away, g.awaySlot, r.as, r)+
+      '</div>';
+    }
+
+    var final = games.filter(function(g){ return g.round === 'Championship'; })[0];
+    var champion = final ? result(final).winner : '';
+
+    if (!document.getElementById('bracket-css')){
+      document.head.insertAdjacentHTML('beforeend',
+        '<style id="bracket-css">'+
+          '.brk-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}'+
+          '.brk{display:flex;gap:14px;align-items:stretch;min-width:max-content}'+
+          '.brk-col{width:232px;display:flex;flex-direction:column}'+
+          '.brk-games{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:10px}'+
+          '.brk-head{font-weight:700;color:#BF0A30;font-size:var(--fs-xs);margin-bottom:8px;text-align:center}'+
+          '@media (min-width:1100px){.brk{min-width:0}.brk-col{flex:1;width:auto;min-width:0}}'+
+        '</style>');
+    }
+
+    layout(el(
+      '<div class="stack">'+
+        '<div class="card stack">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+            '<div style="font-size:var(--fs-lg);font-weight:800">Playoff Bracket</div>'+
+            '<button class="btn secondary sm" id="brk_refresh">Refresh</button>'+
+          '</div>'+
+          (champion
+            ? '<div style="display:flex;align-items:center;gap:10px;font-size:var(--fs-md);font-weight:800">🏆 Champion: '+dot(champion)+_esc(champion)+'</div>'
+            : '<div class="tiny muted">Sunday playoffs. Matchups fill in as they are set. On a phone, swipe sideways to see later rounds.</div>')+
+        '</div>'+
+        '<div class="card brk-scroll">'+
+          '<div class="brk">'+
+            rounds.map(function(rd){
+              return '<div class="brk-col">'+
+                '<div class="brk-head">'+_esc(rd)+'</div>'+
+                '<div class="brk-games">'+
+                  games.filter(function(g){ return g.round === rd; }).map(matchCard).join('')+
+                '</div>'+
+              '</div>';
+            }).join('')+
+          '</div>'+
+        '</div>'+
+      '</div>'
+    ));
+    document.getElementById('brk_refresh').onclick = pageBracket;
+  }
+
+  window.pageBracket    = pageBracket;
   window.pageStandings  = pageStandings;
   window.pageScores     = pageScores;
   window.pageMvp        = pageMvp;
