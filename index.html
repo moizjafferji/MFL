@@ -506,6 +506,7 @@ var router = {
       case 'bid':             return '#/bid';
       case 'info':             return '#/info';
       case 'scores':           return '#/scores';
+      case 'standings':        return '#/standings';
       case 'scoreinput':       return '#/scoreinput';
       case 'mvp':              return '#/mvp';
       case 'playoffs':         return '#/playoffs';
@@ -524,7 +525,7 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info','scores','scoreinput','mvp','playoffs'].includes(seg))
+    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info','scores','standings','scoreinput','mvp','playoffs'].includes(seg))
       return { page: seg };
 
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
@@ -854,6 +855,7 @@ function showLoading(text){
       navItem('Calendar','calendar', { test: ()=> !!state.user });
       navItem('Teams','teams',       { test: ()=> !!state.user });
       navItem('Scores','scores',     { test: ()=> !!state.user });
+      navItem('Standings','standings', { test: ()=> !!state.user });
       navItem('Jersey','jersey',     { test: ()=> !!state.user });
       navItem('Sponsor','sponsor',   { test: ()=> !!state.user });
       // navItem('Captains','captains', { test: ()=> !!state.user }); // HIDDEN — reactivate next season
@@ -4353,6 +4355,7 @@ if (!isAdmin){
       if(state.page==='bid')      return pageBid();
       if(state.page==='info')     return pageInfo();
       if(state.page==='scores')   return _callLatePage_('pageScores');
+      if(state.page==='standings') return _callLatePage_('pageStandings');
       if(state.page==='scoreinput') return _callLatePage_('pageScoreInput');
       if(state.page==='mvp')      return _callLatePage_('pageMvp');
       if(state.page==='playoffs') return _callLatePage_('pagePlayoffs');
@@ -5805,6 +5808,110 @@ else { setTimeout(()=>{ loadEventRows(); }, 0); }
 
   window.pagePlayoffs   = pagePlayoffs;
   window.pageScoreInput = pageScoreInput;
+  /* ================================================================
+     STANDINGS — calculated from pool games (1–40) on the Scores tab
+     Order: Wins (a tie counts as half a win) → Point differential → Points scored
+     ================================================================ */
+  var STANDINGS_POOLS = {
+    'A': ['Black Team','Blue Team','Brown Team','Fuchsia Team','Gray Team','Green Team','Pink Team','Yellow Team'],
+    'B': ['Gold Team','Maroon Team','Orange Team','Purple Team','Red Team','Sky Team','Teal Team','White Team']
+  };
+
+  function pageStandings(){
+    if (!guard()) return;
+    setDocTitle('Standings');
+    showLoading('Loading standings…');
+    gs('api_scores_public').then(function(res){
+      if (!res || !res.ok){ errCard((res && res.error) || 'Failed to load standings.'); return; }
+      renderStandings(res);
+    }).catch(function(e){ errCard((e && e.message) || 'Failed to load standings.'); });
+  }
+
+  function calcStandings(res){
+    var rec = {};
+    Object.keys(STANDINGS_POOLS).forEach(function(p){
+      STANDINGS_POOLS[p].forEach(function(t){ rec[teamKey(t)] = { team:t, pool:p, gp:0, w:0, l:0, t:0, pf:0, pa:0 }; });
+    });
+    var sc = res.scores || {};
+    var played = { A:0, B:0 }, total = { A:0, B:0 };
+    (res.schedule || []).forEach(function(g){
+      if (g.stage === 'Playoffs') return;
+      var h = rec[teamKey(g.home)], a = rec[teamKey(g.away)];
+      if (!h || !a) return;
+      total[h.pool]++;
+      var s = sc[g.game] || {};
+      if (!hasVal(s.homeScore) || !hasVal(s.awayScore)) return;
+      var hs = Number(s.homeScore), as = Number(s.awayScore);
+      if (!isFinite(hs) || !isFinite(as)) return;
+      played[h.pool]++;
+      h.gp++; a.gp++;
+      h.pf += hs; h.pa += as; a.pf += as; a.pa += hs;
+      if (hs > as){ h.w++; a.l++; } else if (as > hs){ a.w++; h.l++; } else { h.t++; a.t++; }
+    });
+    var pools = {};
+    Object.keys(STANDINGS_POOLS).forEach(function(p){
+      pools[p] = Object.keys(rec).map(function(k){ return rec[k]; })
+        .filter(function(r){ return r.pool === p; })
+        .sort(function(x, y){
+          return (y.w + y.t/2) - (x.w + x.t/2) ||
+                 (y.pf - y.pa) - (x.pf - x.pa) ||
+                 y.pf - x.pf ||
+                 x.team.localeCompare(y.team);
+        });
+    });
+    return { pools:pools, played:played, total:total };
+  }
+
+  function renderStandings(res){
+    var st = calcStandings(res);
+    var anyTies = Object.keys(st.pools).some(function(p){ return st.pools[p].some(function(r){ return r.t > 0; }); });
+    var th = 'style="padding:7px 3px;text-align:right;font-weight:700;color:var(--muted);font-size:var(--fs-xxxs)"';
+    var td = 'style="padding:7px 3px;text-align:right;font-variant-numeric:tabular-nums"';
+
+    layout(el(
+      '<div class="stack">'+
+        '<div class="card stack">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+            '<div style="font-size:var(--fs-lg);font-weight:800">Standings</div>'+
+            '<button class="btn secondary sm" id="stn_refresh">Refresh</button>'+
+          '</div>'+
+          '<div class="tiny muted">Pool games only. Ranked by wins'+(anyTies?' (a tie counts as half a win)':'')+', then point differential, then points scored.</div>'+
+        '</div>'+
+        Object.keys(st.pools).map(function(p){
+          return '<div class="card stack">'+
+            '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'+
+              '<div class="label" style="font-size:var(--fs-sm);font-weight:700">Pool '+p+'</div>'+
+              '<div class="tiny muted">'+st.played[p]+' of '+st.total[p]+' games final</div>'+
+            '</div>'+
+            '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">'+
+            '<table style="width:100%;border-collapse:collapse;font-size:var(--fs-xxs)">'+
+              '<thead><tr style="border-bottom:1px solid var(--border)">'+
+                '<th '+th.replace('right','left')+'>Seed</th>'+
+                '<th '+th.replace('right','left')+'>Team</th>'+
+                '<th '+th+'>W</th><th '+th+'>L</th>'+(anyTies?'<th '+th+'>T</th>':'')+
+                '<th '+th+'>PF</th><th '+th+'>PA</th><th '+th+'>+/-</th>'+
+              '</tr></thead><tbody>'+
+              st.pools[p].map(function(r, i){
+                var diff = r.pf - r.pa;
+                var dcol = diff > 0 ? 'var(--ok)' : diff < 0 ? 'var(--err)' : 'var(--muted)';
+                return '<tr style="border-bottom:1px solid var(--border)">'+
+                  '<td style="padding:7px 3px;font-weight:800;color:var(--muted)">'+(i+1)+p+'</td>'+
+                  '<td style="padding:7px 3px"><span style="display:inline-flex;align-items:center;gap:6px;font-weight:700;white-space:nowrap">'+
+                    dot(r.team)+_esc(String(r.team).replace(/\s*Team$/i,''))+'</span></td>'+
+                  '<td '+td+'><b>'+r.w+'</b></td><td '+td+'>'+r.l+'</td>'+(anyTies?'<td '+td+'>'+r.t+'</td>':'')+
+                  '<td '+td+'>'+r.pf+'</td><td '+td+'>'+r.pa+'</td>'+
+                  '<td '+td.replace('tabular-nums','tabular-nums;font-weight:700;color:'+dcol)+'>'+(diff>0?'+':'')+diff+'</td>'+
+                '</tr>';
+              }).join('')+
+            '</tbody></table></div>'+
+          '</div>';
+        }).join('')+
+      '</div>'
+    ));
+    document.getElementById('stn_refresh').onclick = pageStandings;
+  }
+
+  window.pageStandings  = pageStandings;
   window.pageScores     = pageScores;
   window.pageMvp        = pageMvp;
 })();
