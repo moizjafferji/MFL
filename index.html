@@ -5918,15 +5918,15 @@ if (!isAdmin){
   // Fantasy points per stat (edit here to change scoring). Stats not listed count 0.
   var FANTASY_POINTS = {
     'completion': 0.5, 'incomplete': -0.25, 'interception thrown': -2, 'reception': 1, 'target': 0,
-    'drop': -1, 'rush': 0.25, 'flag pull': 0.5, 'pass defense': 1, 'defensive pick': 2, 'penalty': -1,
+    'drop': -1, 'rush': 0.25, 'flag pull': 0.5, 'pass defense': 1, 'defensive pick': 2, 'sack': 1, 'penalty': -1,
     'touchdown': 3, '1 point': 0.5, '2 point': 1, '3 point': 1.5
   };
-  // Real game points a player is credited with
+  // Real game points (separate from fantasy): 6 per TD + extra points
   var GAME_POINTS = { 'touchdown': 6, '1 point': 1, '2 point': 2, '3 point': 3 };
   var LB_CATS = [
     { key:'fantasy',  label:'Fantasy Points', short:'FPTS' },
     { key:'touchdown', label:'Touchdowns', short:'TD' },
-    { key:'points',   label:'Points', short:'PTS' },
+    { key:'points',   label:'Game Points', short:'game pts' },
     { key:'completion', label:'Completions', short:'COMP' },
     { key:'reception', label:'Receptions', short:'REC' },
     { key:'defensive pick', label:'Defensive Picks', short:'INT' },
@@ -6044,7 +6044,7 @@ if (!isAdmin){
         '<div class="card stack"><div class="label">'+_esc(cat.label)+'</div><div>'+rows+'</div></div>'+
         '<div class="card stack"><details><summary class="label" style="cursor:pointer">How fantasy points work</summary>'+
           '<div class="tiny" style="margin-top:10px">'+table+'</div>'+
-          '<div class="tiny muted">Points = 6 per touchdown + extra points (1, 2 or 3).</div></details></div>'+
+          '<div class="tiny muted">Fantasy points use the table above (a touchdown is worth 3). Game Points are the real points a player was credited with: 6 per touchdown + extra points (1, 2 or 3).</div></details></div>'+
       '</div>'
     ));
     document.getElementById('lb_refresh').onclick = pageLeaderboard;
