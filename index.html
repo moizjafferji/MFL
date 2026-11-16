@@ -508,6 +508,7 @@ var router = {
       case 'scores':           return '#/scores';
       case 'standings':        return '#/standings';
       case 'bracket':          return '#/bracket';
+      case 'leaderboard':      return '#/leaderboard';
       case 'scoreinput':       return '#/scoreinput';
       case 'mvp':              return '#/mvp';
       case 'playoffs':         return '#/playoffs';
@@ -526,7 +527,7 @@ var router = {
     const seg = (parts[0]||'').toLowerCase();
 
     // ⬇ add 'stat' to the simple pages list
-    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info','scores','standings','bracket','scoreinput','mvp','playoffs'].includes(seg))
+    if (['home','profile','balance','calendar','teams','jersey','sponsor','landing','create','edit','stat','captains','bid','info','scores','standings','bracket','leaderboard','scoreinput','mvp','playoffs'].includes(seg))
       return { page: seg };
 
     if (seg === 'captain') return { page:'captain', sport: decodeURIComponent(parts[1]||'') };
@@ -855,6 +856,7 @@ function showLoading(text){
       navItem('Balance','balance', { test: ()=> !!state.user });
       navItem('Calendar','calendar', { test: ()=> !!state.user });
       navItem('Teams','teams',       { test: ()=> !!state.user });
+      navItem('Leaderboard','leaderboard', { test: ()=> !!state.user });
       navItem('Scores','scores',     { test: ()=> !!state.user });
       navItem('Standings','standings', { test: ()=> !!state.user });
       navItem('Bracket','bracket',   { test: ()=> !!state.user });
@@ -4359,6 +4361,7 @@ if (!isAdmin){
       if(state.page==='scores')   return _callLatePage_('pageScores');
       if(state.page==='standings') return _callLatePage_('pageStandings');
       if(state.page==='bracket')  return _callLatePage_('pageBracket');
+      if(state.page==='leaderboard') return _callLatePage_('pageLeaderboard');
       if(state.page==='scoreinput') return _callLatePage_('pageScoreInput');
       if(state.page==='mvp')      return _callLatePage_('pageMvp');
       if(state.page==='playoffs') return _callLatePage_('pagePlayoffs');
@@ -4927,6 +4930,7 @@ if (!isAdmin){
       '<b>19 to 18 drop</b> → drop for 18<br>' +
       '<b>19 interception 7</b> → pick for the defender (ball switches sides)<br>' +
       '<b>18 extra point</b> / <b>18 two point</b><br>' +
+      '<b>7 sack</b> / <b>7 flag pull</b> → defense (the team without the ball)<br>' +
       'After a touchdown the next play is the extra point try — record it made or missed (e.g. <b>19 incomplete to 18</b>) and the ball switches teams. Tap <b>Skip</b> if there was no try.<br>' +
       'Say a color if a number is on both teams: <b>red 19 to red 18</b>.<br>' +
       'Voice: say <b>cancel</b> to drop the preview, <b>undo</b> to delete the last play, <b>switch</b> to change who has the ball.' +
@@ -5908,6 +5912,150 @@ if (!isAdmin){
     document.getElementById('brk_refresh').onclick = pageBracket;
   }
 
+  /* ================================================================
+     LEADERBOARD — player totals from the Stats tab
+     ================================================================ */
+  // Fantasy points per stat (edit here to change scoring). Stats not listed count 0.
+  var FANTASY_POINTS = {
+    'completion': 0.5, 'incomplete': -0.25, 'interception thrown': -2, 'reception': 1, 'target': 0,
+    'drop': -1, 'rush': 0.25, 'flag pull': 0.5, 'pass defense': 1, 'defensive pick': 2, 'penalty': -1,
+    'touchdown': 3, '1 point': 0.5, '2 point': 1, '3 point': 1.5
+  };
+  // Real game points a player is credited with
+  var GAME_POINTS = { 'touchdown': 6, '1 point': 1, '2 point': 2, '3 point': 3 };
+  var LB_CATS = [
+    { key:'fantasy',  label:'Fantasy Points', short:'FPTS' },
+    { key:'touchdown', label:'Touchdowns', short:'TD' },
+    { key:'points',   label:'Points', short:'PTS' },
+    { key:'completion', label:'Completions', short:'COMP' },
+    { key:'reception', label:'Receptions', short:'REC' },
+    { key:'defensive pick', label:'Defensive Picks', short:'INT' },
+    { key:'flag pull', label:'Flag Pulls', short:'FP' },
+    { key:'sack', label:'Sacks', short:'SACK' }
+  ];
+  function lbNorm(k){ return String(k||'').toLowerCase().replace(/[^a-z0-9]/g,'').replace(/s$/,''); }
+  var LB = { res:null, event:'', cat:'fantasy' };
+
+  function pageLeaderboard(){
+    if (!guard()) return;
+    setDocTitle('Leaderboard');
+    showLoading('Loading leaderboard…');
+    gs('api_stats_leaderboard').then(function(res){
+      if (!res || !res.ok){
+        var msg = (res && res.error) || 'Failed to load leaderboard.';
+        if (/Unknown method/i.test(msg)) msg = 'The Leaderboard needs the updated api_stats.gs deployed in Apps Script.';
+        errCard(msg); return;
+      }
+      LB.res = res;
+      if (!res.events.some(function(e){ return e.id === LB.event; })) LB.event = res.events.length ? res.events[0].id : '';
+      renderLeaderboard();
+    }).catch(function(e){ errCard((e && e.message) || 'Failed to load leaderboard.'); });
+  }
+
+  function lbPlayers(){
+    var res = LB.res, counts = (res.counts || {})[LB.event] || {};
+    var fp = {}, gp = {};
+    Object.keys(FANTASY_POINTS).forEach(function(k){ fp[lbNorm(k)] = FANTASY_POINTS[k]; });
+    Object.keys(GAME_POINTS).forEach(function(k){ gp[lbNorm(k)] = GAME_POINTS[k]; });
+    return Object.keys(counts).map(function(its){
+      var raw = counts[its], st = {}, fantasy = 0, points = 0;
+      Object.keys(raw).forEach(function(k){
+        var n = lbNorm(k); st[n] = (st[n] || 0) + raw[k];
+        fantasy += (fp[n] || 0) * raw[k];
+        points  += (gp[n] || 0) * raw[k];
+      });
+      var m = (res.players || {})[its] || {};
+      return { its:its, name:m.name || ('ITS ' + its), number:m.number, team:m.team || '', st:st,
+               fantasy: Math.round(fantasy * 100) / 100, points: points };
+    });
+  }
+  function lbValue(p, cat){
+    if (cat === 'fantasy') return p.fantasy;
+    if (cat === 'points') return p.points;
+    return p.st[lbNorm(cat)] || 0;
+  }
+  function lbFmt(v){ return (Math.round(v * 100) / 100).toString(); }
+  function lbWho(p){
+    return '<span style="display:inline-flex;align-items:center;gap:7px;min-width:0">'+dot(p.team)+
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+(hasVal(p.number)?'#'+_esc(p.number)+' ':'')+'</b>'+_esc(p.name)+'</span></span>';
+  }
+
+  function renderLeaderboard(){
+    var res = LB.res;
+    var players = lbPlayers();
+    if (!document.getElementById('lb-css')){
+      document.head.insertAdjacentHTML('beforeend','<style id="lb-css">'+
+        '.lb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:8px}'+
+        '.lb-tile{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:#0e1626;cursor:pointer;min-width:0}'+
+        '.lb-tile.on{border-color:var(--accent);background:rgba(59,130,246,.10)}'+
+        '.lb-tile .v{font-size:var(--fs-xl);font-weight:800;font-variant-numeric:tabular-nums}'+
+        '.lb-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}'+
+        '.lb-row .v{font-weight:800;font-variant-numeric:tabular-nums}'+
+      '</style>');
+    }
+    var evSel = (res.events || []).length > 1
+      ? '<select id="lb_event" class="input">'+res.events.map(function(e){ return '<option value="'+_esc(e.id)+'"'+(e.id===LB.event?' selected':'')+'>'+_esc(e.label)+'</option>'; }).join('')+'</select>'
+      : '';
+
+    var tiles = LB_CATS.map(function(c){
+      var ranked = players.filter(function(p){ return lbValue(p, c.key) > 0; }).sort(function(a,b){ return lbValue(b,c.key) - lbValue(a,c.key); });
+      var top = ranked[0];
+      var ties = top ? ranked.filter(function(p){ return lbValue(p,c.key) === lbValue(top,c.key); }).length - 1 : 0;
+      return '<div class="lb-tile'+(LB.cat===c.key?' on':'')+'" data-cat="'+_esc(c.key)+'">'+
+        '<div class="tiny muted">'+_esc(c.label)+'</div>'+
+        (top
+          ? '<div class="v">'+lbFmt(lbValue(top,c.key))+'</div><div class="tiny">'+lbWho(top)+(ties>0?' <span class="muted">+'+ties+' tied</span>':'')+'</div>'
+          : '<div class="v muted">—</div><div class="tiny muted">No stats yet</div>')+
+      '</div>';
+    }).join('');
+
+    var cat = LB_CATS.filter(function(c){ return c.key === LB.cat; })[0] || LB_CATS[0];
+    var list = players.filter(function(p){ return cat.key === 'fantasy' ? Object.keys(p.st).length : lbValue(p, cat.key) > 0; })
+      .sort(function(a,b){ return lbValue(b,cat.key) - lbValue(a,cat.key) || String(a.name).localeCompare(String(b.name)); });
+    var rank = 0, prev = null;
+    var rows = list.map(function(p, i){
+      var v = lbValue(p, cat.key);
+      if (v !== prev){ rank = i + 1; prev = v; }
+      var sub = '';
+      if (cat.key === 'fantasy'){
+        sub = '<div class="tiny muted" style="margin-left:21px">'+
+          LB_CATS.slice(1).map(function(c){ var x = lbValue(p,c.key); return x ? x+' '+c.short : ''; }).filter(Boolean).join(' · ')+'</div>';
+      }
+      return '<div class="lb-row"><div class="muted" style="font-weight:800">'+rank+'</div>'+
+        '<div style="min-width:0">'+lbWho(p)+sub+'</div><div class="v">'+lbFmt(v)+'</div></div>';
+    }).join('') || '<div class="muted tiny">No '+_esc(cat.label.toLowerCase())+' recorded yet.</div>';
+
+    var table = Object.keys(FANTASY_POINTS).map(function(k){
+      var v = FANTASY_POINTS[k];
+      return '<span class="sk-chip" style="display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 9px;margin:0 6px 6px 0">'+_esc(k)+' <b>'+(v>0?'+':'')+v+'</b></span>';
+    }).join('');
+
+    layout(el(
+      '<div class="stack">'+
+        '<div class="card stack">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+            '<div style="font-size:var(--fs-lg);font-weight:800">Leaderboard</div>'+
+            '<button class="btn secondary sm" id="lb_refresh">Refresh</button>'+
+          '</div>'+ evSel +
+          ((res.events||[]).length ? '' : '<div class="muted">No stats recorded yet.</div>')+
+        '</div>'+
+        '<div class="card stack"><div class="label">Leaders</div><div class="lb-grid">'+tiles+'</div>'+
+          '<div class="tiny muted">Tap a category to see everyone.</div></div>'+
+        '<div class="card stack"><div class="label">'+_esc(cat.label)+'</div><div>'+rows+'</div></div>'+
+        '<div class="card stack"><details><summary class="label" style="cursor:pointer">How fantasy points work</summary>'+
+          '<div class="tiny" style="margin-top:10px">'+table+'</div>'+
+          '<div class="tiny muted">Points = 6 per touchdown + extra points (1, 2 or 3).</div></details></div>'+
+      '</div>'
+    ));
+    document.getElementById('lb_refresh').onclick = pageLeaderboard;
+    var es = document.getElementById('lb_event');
+    if (es) es.onchange = function(){ LB.event = this.value; renderLeaderboard(); };
+    document.querySelectorAll('.lb-tile').forEach(function(t){
+      t.onclick = function(){ LB.cat = t.getAttribute('data-cat'); renderLeaderboard(); };
+    });
+  }
+
+  window.pageLeaderboard = pageLeaderboard;
   window.pageBracket    = pageBracket;
   window.pageStandings  = pageStandings;
   window.pageScores     = pageScores;
