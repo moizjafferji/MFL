@@ -5986,7 +5986,10 @@ if (!isAdmin){
     if (!document.getElementById('lb-css')){
       document.head.insertAdjacentHTML('beforeend','<style id="lb-css">'+
         '.lb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:8px}'+
-        '.lb-tile{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:#0e1626;cursor:pointer;min-width:0}'+
+        '.lb-tile{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:#0e1626;cursor:pointer;min-width:0;overflow:hidden}'+
+        '.lb-name{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}'+
+        '.lb-name .nm{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:clip;white-space:nowrap}'+
+        '.lb-name .tie{flex:0 0 auto}'+
         '.lb-tile.on{border-color:var(--accent);background:rgba(59,130,246,.10)}'+
         '.lb-tile .v{font-size:var(--fs-xl);font-weight:800;font-variant-numeric:tabular-nums}'+
         '.lb-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}'+
@@ -6004,7 +6007,11 @@ if (!isAdmin){
       return '<div class="lb-tile'+(LB.cat===c.key?' on':'')+'" data-cat="'+_esc(c.key)+'">'+
         '<div class="tiny muted">'+_esc(c.label)+'</div>'+
         (top
-          ? '<div class="v">'+lbFmt(lbValue(top,c.key))+'</div><div class="tiny">'+lbWho(top)+(ties>0?' <span class="muted">+'+ties+' tied</span>':'')+'</div>'
+          ? '<div class="v">'+lbFmt(lbValue(top,c.key))+'</div>'+
+            '<div class="tiny lb-name">'+dot(top.team)+
+              '<span class="nm"><b>'+(hasVal(top.number)?'#'+_esc(top.number)+' ':'')+'</b>'+_esc(top.name)+'</span>'+
+              (ties>0?'<span class="tie muted">+'+ties+' tied</span>':'')+
+            '</div>'
           : '<div class="v muted">—</div><div class="tiny muted">No stats yet</div>')+
       '</div>';
     }).join('');
