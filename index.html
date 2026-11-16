@@ -4765,6 +4765,14 @@ if (!isAdmin){
   function offenseKey(){ return 'statkit.ball.' + S.eventId + '.' + S.game; }
   function getOffense(){ const o = lsGet(offenseKey(), ''); return gameTeams().some(t => tkey(t) === tkey(o)) ? o : ''; }
   function setOffense(t){ lsSet(offenseKey(), t); renderBall(); }
+  // Extra-point try: after a TD the scoring team keeps the ball for one more play,
+  // then it goes to the other team no matter how that play turns out.
+  function convKey(){ return 'statkit.conv.' + S.eventId + '.' + S.game; }
+  function getConv(){ const c = lsGet(convKey(), null); return (c && c.team && gameTeams().some(t => tkey(t) === tkey(c.team))) ? c : null; }
+  function setConv(c){ lsSet(convKey(), c || null); renderBall(); }
+  function otherTeam(t){ return gameTeams().find(x => tkey(x) !== tkey(t)) || ''; }
+  // Ball state before the most recent play, so Undo can put it back
+  function prevKey(){ return 'statkit.prev.' + S.eventId + '.' + S.game; }
   function ctxNow(){
     const sp = sportForEvent();
     return buildCtx({ statMap: (S.boot.sports[sp] && S.boot.sports[sp].aliasToKey) || {}, jerseys: S.boot.jerseys || [],
@@ -4783,6 +4791,7 @@ if (!isAdmin){
       '.sk-mic{width:100%;padding:16px;font-size:var(--fs-md)}' +
       '.sk-mic.live{background:#dc2626;animation:skpulse 1.6s infinite}' +
       '@keyframes skpulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}50%{box-shadow:0 0 0 10px rgba(220,38,38,0)}}' +
+      '.sk-conv{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px;padding:10px 12px;border-radius:12px;border:1px dashed #f59e0b;background:rgba(245,158,11,.08);font-size:var(--fs-xs)}' +
       '.sk-pending{border:2px solid var(--accent);border-radius:12px;padding:12px;background:rgba(59,130,246,.08)}' +
       '.sk-bar{height:4px;background:var(--accent);border-radius:2px;margin-top:10px;transform-origin:left;animation:skbar 3s linear forwards}' +
       '@keyframes skbar{from{transform:scaleX(1)}to{transform:scaleX(0)}}' +
@@ -4884,8 +4893,13 @@ if (!isAdmin){
     const off = getOffense();
     box.innerHTML = '<div class="label" style="margin-bottom:6px">Who has the ball?</div><div class="sk-ball">' +
       gt.map(t => '<button data-ball="' + esc(t) + '" class="' + (tkey(t) === tkey(off) ? 'on' : '') + '">' + dot(t) + esc(shortTeam(t)) + (tkey(t) === tkey(off) ? ' 🏈' : '') + '</button>').join('') +
-      '</div>';
-    box.querySelectorAll('[data-ball]').forEach(b => b.onclick = () => setOffense(b.getAttribute('data-ball')));
+      '</div>' +
+      (getConv() ? '<div class="sk-conv"><div><b>Extra point try: ' + esc(shortTeam(getConv().team)) + '</b><br><span class="muted">After this play the ball goes to ' +
+        esc(shortTeam(otherTeam(getConv().team))) + '.</span></div><button class="btn secondary sm" id="sk_convskip">Skip</button></div>' : '');
+    // Tapping a team is a manual override, so it ends any extra-point try
+    box.querySelectorAll('[data-ball]').forEach(b => b.onclick = () => { lsSet(convKey(), null); setOffense(b.getAttribute('data-ball')); });
+    const sk = $('#sk_convskip');
+    if (sk) sk.onclick = () => { const c = getConv(); lsSet(convKey(), null); setOffense(otherTeam(c.team)); status('No extra point recorded. Ball: ' + shortTeam(getOffense()) + '.'); };
   }
 
   function renderRoster(){
@@ -4913,6 +4927,7 @@ if (!isAdmin){
       '<b>19 to 18 drop</b> → drop for 18<br>' +
       '<b>19 interception 7</b> → pick for the defender (ball switches sides)<br>' +
       '<b>18 extra point</b> / <b>18 two point</b><br>' +
+      'After a touchdown the next play is the extra point try — record it made or missed (e.g. <b>19 incomplete to 18</b>) and the ball switches teams. Tap <b>Skip</b> if there was no try.<br>' +
       'Say a color if a number is on both teams: <b>red 19 to red 18</b>.<br>' +
       'Voice: say <b>cancel</b> to drop the preview, <b>undo</b> to delete the last play, <b>switch</b> to change who has the ball.' +
       '</div>' +
@@ -4969,10 +4984,29 @@ if (!isAdmin){
     };
     enqueue(play);
     flash('✓ Saved: ' + describe(p.actions).map(x => '#' + x.j.number + ' ' + x.stats.join(', ')).join(' · '), false);
-    // An interception hands the ball to the other team
-    if (p.kind === 'int'){
-      const gt = gameTeams(); const off = getOffense();
-      if (gt.length === 2 && off){ setOffense(gt.find(t => tkey(t) !== tkey(off))); status('Ball switched to ' + shortTeam(getOffense()) + '.'); }
+    // Possession after the play
+    const gt = gameTeams();
+    if (gt.length === 2){
+      lsSet(prevKey(), { playId: play.playId, off: getOffense(), conv: getConv() });
+      const kTD = key(ctxNow(), 'touchdown');
+      const td = p.actions.find(a => a.stat === kTD);
+      const conv = getConv();
+      if (conv){
+        // this was the extra-point play (made or missed): ball to the team that didn't score
+        lsSet(convKey(), null);
+        setOffense(otherTeam(conv.team));
+        status('Extra point play done. Ball: ' + shortTeam(getOffense()) + '.');
+      } else if (td){
+        // touchdown: scoring team keeps the ball for the extra-point play
+        const scorer = gt.find(t => tkey(t) === tkey(td.j.team)) || td.j.team;
+        lsSet(offenseKey(), scorer);
+        setConv({ team: scorer, playId: play.playId });
+        status('Touchdown ' + shortTeam(scorer) + '! Next play is the extra point try.');
+      } else if (p.kind === 'int' && getOffense()){
+        // an interception hands the ball to the other team
+        setOffense(otherTeam(getOffense()));
+        status('Ball switched to ' + shortTeam(getOffense()) + '.');
+      }
     }
     renderList(); renderScore();
     flushQueue().then(() => loadRows());
@@ -5019,13 +5053,24 @@ if (!isAdmin){
     const q = loadQ().filter(p => String(p.eventId) === String(S.eventId) && String(p.game) === String(S.game));
     if (q.length){
       const p = q[q.length - 1];
-      dequeue(p.playId); flash('Removed the last play (it hadn’t uploaded yet).', false); renderList(); renderScore(); return;
+      dequeue(p.playId); restoreBall(p.playId); flash('Removed the last play (it hadn’t uploaded yet).', false); renderList(); renderScore(); return;
     }
     const plays = groupPlays(gameRows());
     if (!plays.length){ flash('No plays to undo.', true); return; }
     const p = plays[0];
     if (skipConfirm !== true && !confirm('Undo this play?\n\n' + p.rows.map(r => { const m = metaFor(r.its) || {}; return '#' + (m.number || '?') + ' ' + (m.name || '') + ' — ' + r.stat; }).join('\n'))) return;
-    if (await deleteIds(p.rows.map(r => r.id))) flash('Last play removed.', false);
+    if (await deleteIds(p.rows.map(r => r.id))){ restoreBall(p.rows[0] && p.rows[0].play); flash('Last play removed.', false); }
+  }
+  // Put possession / extra-point state back to how it was before the undone play
+  function restoreBall(playId){
+    const prev = lsGet(prevKey(), null);
+    if (!prev || !playId || prev.playId !== playId) return;
+    lsSet(convKey(), prev.conv || null);
+    lsSet(offenseKey(), prev.off || '');
+    lsSet(prevKey(), null);
+    renderBall();
+    const c = getConv();
+    status(c ? 'Back to the extra point try: ' + shortTeam(c.team) + '.' : (getOffense() ? 'Ball back to ' + shortTeam(getOffense()) + '.' : ''));
   }
 
   /* ---------- list + scoreboard ---------- */
